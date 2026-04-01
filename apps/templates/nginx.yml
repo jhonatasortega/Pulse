@@ -1,0 +1,21 @@
+id: nginx
+name: Nginx
+description: Servidor web leve e de alta performance. Ideal para servir arquivos estáticos ou como reverse proxy.
+version: "1.27"
+category: web
+icon: 🌐
+
+docker:
+  image: nginx:alpine
+  ports:
+    - "8181:80"
+  volumes:
+    - ./html:/usr/share/nginx/html
+    - ./conf:/etc/nginx/conf.d
+  env: []
+  restart: unless-stopped
+
+links:
+  - label: Web Interface
+    port: 8181
+    path: /

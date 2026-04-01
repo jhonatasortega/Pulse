@@ -1,0 +1,25 @@
+services:
+  pulse-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pulse_backend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+      - ./agents:/app/agents
+      - ./apps/templates:/app/apps/templates
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /mnt:/mnt:rshared
+      - /media:/media:rshared
+      - /home/jortega:/home/jortega
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PULSE_DATA_DIR=/app/data
+      # Set a strong key to enable authentication. Leave empty to disable (dev mode).
+      - PULSE_API_KEY=${PULSE_API_KEY:-}
+    restart: unless-stopped
+    labels:
+      - pulse.managed=false
+      - pulse.core=true

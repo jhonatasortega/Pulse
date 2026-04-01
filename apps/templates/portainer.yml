@@ -1,0 +1,21 @@
+id: portainer
+name: Portainer CE
+description: Interface web para gerenciamento de containers Docker. Complementa o Pulse com funcionalidades avançadas de inspeção.
+version: "2.21"
+category: management
+icon: 🐳
+
+docker:
+  image: portainer/portainer-ce:latest
+  ports:
+    - "9000:9000"
+  volumes:
+    - ./data:/data
+    - /var/run/docker.sock:/var/run/docker.sock
+  env: []
+  restart: unless-stopped
+
+links:
+  - label: Portainer UI
+    port: 9000
+    path: /

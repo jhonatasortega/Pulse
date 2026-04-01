@@ -1,0 +1,571 @@
+import { useEffect, useState } from 'react'
+import { api } from '../api'
+import { memCache, bust } from '../cache'
+import {
+  Download, Trash2, Play, Square, RefreshCw, Package,
+  Settings, ArrowUpCircle, X, Search, Plus, PlusCircle,
+} from 'lucide-react'
+
+const categoryColors = {
+  web: 'bg-blue-500/10 text-blue-400',
+  management: 'bg-purple-500/10 text-purple-400',
+  monitoring: 'bg-green-500/10 text-green-400',
+  tools: 'bg-orange-500/10 text-orange-400',
+  media: 'bg-pink-500/10 text-pink-400',
+  store: 'bg-cyan-500/10 text-cyan-400',
+}
+
+const emojiMap = {
+  plex: '🎬', nginx: '🌐', portainer: '🐳', jellyfin: '🎵',
+  nextcloud: '☁️', sonarr: '📺', radarr: '🎥', prowlarr: '🔍',
+  filebrowser: '📁', 'uptime-kuma': '📊', adguard: '🛡️',
+  transmission: '⬇️', ghost: '👻', watchtower: '🔭', bazarr: '💬',
+  lidarr: '🎧', speedtest: '⚡', stirling: '📄', changedetection: '🔔',
+  chatpad: '💬', unmanic: '🔄', pihole: '🛡️',
+}
+
+function getEmoji(template) {
+  const key = Object.keys(emojiMap).find(k =>
+    template.id?.toLowerCase().includes(k) || template.name?.toLowerCase().includes(k)
+  )
+  return emojiMap[key] || template.icon || '📦'
+}
+
+function AppIcon({ template, size = 'lg' }) {
+  const [imgErr, setImgErr] = useState(false)
+  const s = size === 'lg' ? 'w-14 h-14 text-3xl' : 'w-10 h-10 text-xl'
+  if (template.icon_url && !imgErr) {
+    return (
+      <img src={template.icon_url} alt={template.name} onError={() => setImgErr(true)}
+        className={`${s} rounded-2xl object-cover bg-[#2a2d3e]`} />
+    )
+  }
+  return (
+    <div className={`${s} rounded-2xl bg-gradient-to-br from-[#2a2d3e] to-[#1a1d27] flex items-center justify-center`}>
+      {getEmoji(template)}
+    </div>
+  )
+}
+
+// ─── generic modal wrapper ────────────────────────────────────────────────────
+function Modal({ title, onClose, children, wide }) {
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto">
+      <div className={`bg-[#1a1d27] border border-[#2a2d3e] rounded-xl w-full ${wide ? 'max-w-2xl' : 'max-w-md'} my-4`}>
+        <div className="px-5 py-4 border-b border-[#2a2d3e] flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-white">{title}</h2>
+          <button onClick={onClose} className="text-[#94a3b8] hover:text-white"><X size={18} /></button>
+        </div>
+        <div className="p-5">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+// ─── install modal (template-based) ──────────────────────────────────────────
+function InstallModal({ template, onClose, onDone }) {
+  const [fields, setFields] = useState(() => {
+    const init = {}
+    ;(template.docker?.env || []).forEach(e => {
+      if (e.includes('=')) { const [k, v] = e.split('=', 2); init[k] = v }
+    })
+    return init
+  })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const envDefs = template.docker?.env || []
+
+  async function submit(e) {
+    e.preventDefault(); setLoading(true); setError('')
+    try { await api.apps.install(template.id, fields); onDone() }
+    catch (err) { setError(err.message) }
+    finally { setLoading(false) }
+  }
+
+  return (
+    <Modal title={`Instalar ${template.name}`} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        {envDefs.length > 0 ? (
+          <>
+            <p className="text-xs text-[#64748b]">Variáveis de ambiente</p>
+            {envDefs.map(e => {
+              if (!e.includes('=')) return null
+              const [k] = e.split('=', 1)
+              return (
+                <div key={k}>
+                  <label className="text-xs text-[#94a3b8] mb-1 block font-mono">{k}</label>
+                  <input value={fields[k] ?? ''} onChange={ev => setFields(f => ({ ...f, [k]: ev.target.value }))}
+                    className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#6366f1]" />
+                </div>
+              )
+            })}
+          </>
+        ) : (
+          <p className="text-xs text-[#64748b]">Este app não requer configuração.</p>
+        )}
+        {error && <p className="text-xs text-red-400">{error}</p>}
+        <button type="submit" disabled={loading}
+          className="w-full py-2.5 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#4f46e5] disabled:opacity-40">
+          {loading ? 'Instalando...' : 'Instalar'}
+        </button>
+      </form>
+    </Modal>
+  )
+}
+
+// ─── reconfigure modal (reads live container config) ─────────────────────────
+function ReconfigureModal({ installed, onClose, onDone }) {
+  const [envRows, setEnvRows] = useState([])
+  const [restart, setRestart] = useState('unless-stopped')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api.containers.config(installed.container_name)
+      .then(cfg => {
+        setEnvRows(Object.entries(cfg.env).map(([k, v]) => ({ k, v })))
+        setRestart(cfg.restart_policy)
+        setLoading(false)
+      })
+      .catch(() => {
+        // fallback to template env defs
+        const rows = []
+        ;(installed.template?.docker?.env || []).forEach(e => {
+          if (e.includes('=')) {
+            const [k, v] = e.split('=', 2)
+            rows.push({ k, v: installed.env_overrides?.[k] ?? v })
+          }
+        })
+        setEnvRows(rows)
+        setLoading(false)
+      })
+  }, [installed])
+
+  function setRow(i, field, val) {
+    setEnvRows(rows => rows.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
+  }
+
+  async function save() {
+    setSaving(true); setError('')
+    try {
+      const env = {}
+      envRows.forEach(({ k, v }) => { if (k.trim()) env[k.trim()] = v })
+      await api.containers.updateConfig(installed.container_name, env, restart)
+      onDone(); onClose()
+    } catch (e) { setError(e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Modal title={`Configurar ${installed.name}`} onClose={onClose}>
+      {loading ? (
+        <div className="py-8 text-center text-[#64748b] text-sm">Carregando configuração...</div>
+      ) : (
+        <div className="space-y-5">
+          <div>
+            <label className="text-xs text-[#64748b] uppercase tracking-wider font-medium block mb-2">Restart Policy</label>
+            <select value={restart} onChange={e => setRestart(e.target.value)}
+              className="w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2">
+              <option value="no">no</option>
+              <option value="always">always</option>
+              <option value="unless-stopped">unless-stopped</option>
+              <option value="on-failure">on-failure</option>
+            </select>
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs text-[#64748b] uppercase tracking-wider font-medium">Variáveis de Ambiente</label>
+              <button onClick={() => setEnvRows(r => [...r, { k: '', v: '' }])}
+                className="text-xs text-indigo-400 hover:text-indigo-300">+ Adicionar</button>
+            </div>
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {envRows.map((row, i) => (
+                <div key={i} className="flex gap-2">
+                  <input value={row.k} onChange={e => setRow(i, 'k', e.target.value)} placeholder="KEY"
+                    className="flex-1 bg-[#0f1117] border border-[#2a2d3e] text-white text-xs rounded-lg px-3 py-2 font-mono" />
+                  <input value={row.v} onChange={e => setRow(i, 'v', e.target.value)} placeholder="value"
+                    className="flex-1 bg-[#0f1117] border border-[#2a2d3e] text-white text-xs rounded-lg px-3 py-2 font-mono" />
+                  <button onClick={() => setEnvRows(r => r.filter((_, idx) => idx !== i))}
+                    className="text-[#64748b] hover:text-red-400 px-1"><X size={14} /></button>
+                </div>
+              ))}
+              {envRows.length === 0 && <p className="text-xs text-[#475569]">Nenhuma variável.</p>}
+            </div>
+          </div>
+          {error && <p className="text-xs text-red-400">{error}</p>}
+          <p className="text-xs text-yellow-400/80">⚠ O container será parado e recriado.</p>
+          <div className="flex gap-3">
+            <button onClick={onClose} className="flex-1 py-2.5 bg-[#2a2d3e] text-[#94a3b8] rounded-lg text-sm hover:text-white">Cancelar</button>
+            <button onClick={save} disabled={saving}
+              className="flex-1 py-2.5 bg-[#6366f1] text-white rounded-lg text-sm hover:bg-[#4f46e5] disabled:opacity-40">
+              {saving ? 'Salvando...' : 'Aplicar e Recriar'}
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+// ─── manual install modal (CasaOS-style) ─────────────────────────────────────
+function ListField({ label, items, onChange, fields, placeholders }) {
+  function add() { onChange([...items, Object.fromEntries(fields.map(f => [f, '']))]) }
+  function remove(i) { onChange(items.filter((_, idx) => idx !== i)) }
+  function set(i, field, val) { onChange(items.map((item, idx) => idx === i ? { ...item, [field]: val } : item)) }
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-xs text-[#64748b] uppercase tracking-wider font-medium">{label}</label>
+        <button type="button" onClick={add} className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
+          <Plus size={12} />Add
+        </button>
+      </div>
+      <div className="space-y-2">
+        {items.map((item, i) => (
+          <div key={i} className="flex gap-2 items-center">
+            {fields.map(f => (
+              <input key={f} value={item[f]} onChange={e => set(i, f, e.target.value)}
+                placeholder={placeholders?.[f] || f}
+                className="flex-1 bg-[#0f1117] border border-[#2a2d3e] text-white text-xs rounded-lg px-2 py-1.5 font-mono" />
+            ))}
+            <button type="button" onClick={() => remove(i)} className="text-[#64748b] hover:text-red-400"><X size={13} /></button>
+          </div>
+        ))}
+        {items.length === 0 && <p className="text-xs text-[#475569]">Nenhum configurado.</p>}
+      </div>
+    </div>
+  )
+}
+
+function ManualInstallModal({ onClose, onDone }) {
+  const [form, setForm] = useState({
+    image: '', tag: 'latest', name: '', icon_url: '',
+    network: 'bridge', restart: 'unless-stopped',
+    webui_port: '', webui_path: '/',
+  })
+  const [ports, setPorts] = useState([])
+  const [volumes, setVolumes] = useState([])
+  const [env, setEnv] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [iconErr, setIconErr] = useState(false)
+
+  function setF(k, v) { setForm(f => ({ ...f, [k]: v })) }
+
+  async function submit(e) {
+    e.preventDefault()
+    if (!form.image.trim() || !form.name.trim()) { setError('Imagem e nome são obrigatórios'); return }
+    setLoading(true); setError('')
+    try {
+      await api.apps.customInstall({
+        ...form,
+        ports: ports.map(p => ({ host: p.host, container: p.container, protocol: p.protocol || 'tcp' })),
+        volumes: volumes.map(v => ({ host: v.host, container: v.container, mode: v.mode || 'rw' })),
+        env: env.map(e => ({ key: e.key, value: e.value })),
+      })
+      onDone(); onClose()
+    } catch (err) { setError(err.message) }
+    finally { setLoading(false) }
+  }
+
+  const inp = "w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-[#6366f1]"
+
+  return (
+    <Modal title="Instalar app manualmente" onClose={onClose} wide>
+      <form onSubmit={submit} className="space-y-5">
+        {/* Image + tag */}
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="text-xs text-[#64748b] block mb-1">Docker Image *</label>
+            <input value={form.image} onChange={e => setF('image', e.target.value)}
+              placeholder="ghcr.io/owner/app" className={inp} />
+          </div>
+          <div className="w-28">
+            <label className="text-xs text-[#64748b] block mb-1">Tag</label>
+            <input value={form.tag} onChange={e => setF('tag', e.target.value)}
+              placeholder="latest" className={inp} />
+          </div>
+        </div>
+
+        {/* Name + icon */}
+        <div className="flex gap-3 items-end">
+          <div className="flex-1">
+            <label className="text-xs text-[#64748b] block mb-1">Nome do App *</label>
+            <input value={form.name} onChange={e => setF('name', e.target.value)}
+              placeholder="meu-app" className={inp} />
+          </div>
+          <div className="flex items-center gap-2">
+            {form.icon_url && !iconErr && (
+              <img src={form.icon_url} onError={() => setIconErr(true)}
+                className="w-9 h-9 rounded-xl object-cover bg-[#2a2d3e]" />
+            )}
+          </div>
+        </div>
+
+        {/* Icon URL */}
+        <div>
+          <label className="text-xs text-[#64748b] block mb-1">Icon URL</label>
+          <input value={form.icon_url} onChange={e => { setF('icon_url', e.target.value); setIconErr(false) }}
+            placeholder="https://..." className={inp} />
+        </div>
+
+        {/* Web UI */}
+        <div>
+          <label className="text-xs text-[#64748b] block mb-1">Web UI</label>
+          <div className="flex gap-2">
+            <select value={form.network === 'host' ? 'host' : 'http'}
+              className="bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-2 py-2 w-20">
+              <option value="http">http://</option>
+              <option value="https">https://</option>
+            </select>
+            <input value={form.webui_port} onChange={e => setF('webui_port', e.target.value)}
+              placeholder="Porta" className="w-24 bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2" />
+            <input value={form.webui_path} onChange={e => setF('webui_path', e.target.value)}
+              placeholder="/" className="flex-1 bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2" />
+          </div>
+        </div>
+
+        {/* Network + restart */}
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="text-xs text-[#64748b] block mb-1">Network</label>
+            <select value={form.network} onChange={e => setF('network', e.target.value)}
+              className="w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2">
+              <option value="bridge">bridge</option>
+              <option value="host">host</option>
+              <option value="none">none</option>
+            </select>
+          </div>
+          <div className="flex-1">
+            <label className="text-xs text-[#64748b] block mb-1">Restart</label>
+            <select value={form.restart} onChange={e => setF('restart', e.target.value)}
+              className="w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2">
+              <option value="unless-stopped">unless-stopped</option>
+              <option value="always">always</option>
+              <option value="on-failure">on-failure</option>
+              <option value="no">no</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Ports */}
+        <ListField label="Ports" items={ports} onChange={setPorts}
+          fields={['host', 'container', 'protocol']}
+          placeholders={{ host: 'Host', container: 'Container', protocol: 'tcp' }} />
+
+        {/* Volumes */}
+        <ListField label="Volumes" items={volumes} onChange={setVolumes}
+          fields={['host', 'container']}
+          placeholders={{ host: '/host/path', container: '/container/path' }} />
+
+        {/* Env vars */}
+        <ListField label="Environment Variables" items={env} onChange={setEnv}
+          fields={['key', 'value']}
+          placeholders={{ key: 'KEY', value: 'value' }} />
+
+        {error && <p className="text-xs text-red-400">{error}</p>}
+        <button type="submit" disabled={loading}
+          className="w-full py-2.5 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#4f46e5] disabled:opacity-40">
+          {loading ? 'Instalando (pode demorar)...' : 'Instalar'}
+        </button>
+      </form>
+    </Modal>
+  )
+}
+
+// ─── App Card ─────────────────────────────────────────────────────────────────
+function AppCard({ template, installed, onInstall, onUninstall, onStart, onStop, onUpdate, onConfigure, busy }) {
+  const isInstalled = !!installed
+  const status = installed?.status
+  return (
+    <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-2xl p-5 flex flex-col gap-4 hover:border-[#3a3d4e] transition-colors">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <AppIcon template={template} />
+          <div className="min-w-0">
+            <h3 className="font-semibold text-white text-sm leading-tight">{template.name}</h3>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full mt-1 inline-block ${categoryColors[template.category] || 'bg-[#2a2d3e] text-[#94a3b8]'}`}>
+              {template.source === 'tmcstore' ? 'TMC Store' : template.category || 'local'}
+            </span>
+          </div>
+        </div>
+        {isInstalled && (
+          <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 ${
+            status === 'running' ? 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]' :
+            status === 'exited' ? 'bg-red-400' : 'bg-yellow-400'
+          }`} />
+        )}
+      </div>
+      <p className="text-xs text-[#64748b] leading-relaxed flex-1 line-clamp-2">{template.description}</p>
+      <div className="flex items-center justify-between pt-1 border-t border-[#2a2d3e]">
+        <span className="text-xs text-[#64748b]">v{template.version}</span>
+        <div className="flex items-center gap-1">
+          {!isInstalled ? (
+            <button onClick={() => onInstall(template)} disabled={busy}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#6366f1] text-white text-xs rounded-lg hover:bg-[#4f46e5] disabled:opacity-40">
+              <Download size={12} />Instalar
+            </button>
+          ) : (
+            <>
+              {status !== 'running' && (
+                <button onClick={() => onStart(template.id)} disabled={busy} title="Iniciar"
+                  className="p-1.5 rounded-lg text-green-400 hover:bg-green-500/10 disabled:opacity-40"><Play size={13} /></button>
+              )}
+              {status === 'running' && (
+                <button onClick={() => onStop(template.id)} disabled={busy} title="Parar"
+                  className="p-1.5 rounded-lg text-yellow-400 hover:bg-yellow-500/10 disabled:opacity-40"><Square size={13} /></button>
+              )}
+              <button onClick={() => onConfigure(installed)} disabled={busy} title="Configurar"
+                className="p-1.5 rounded-lg text-[#94a3b8] hover:bg-[#2a2d3e] hover:text-white disabled:opacity-40"><Settings size={13} /></button>
+              <button onClick={() => onUpdate(template.id)} disabled={busy} title="Atualizar"
+                className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-500/10 disabled:opacity-40"><ArrowUpCircle size={13} /></button>
+              <button onClick={() => onUninstall(template.id)} disabled={busy}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-red-500/10 text-red-400 text-xs rounded-lg hover:bg-red-500/20 disabled:opacity-40">
+                <Trash2 size={12} />Remover
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── page ─────────────────────────────────────────────────────────────────────
+const TABS = [
+  { id: 'all', label: 'Todos' },
+  { id: 'installed', label: 'Instalados' },
+  { id: 'local', label: 'Local' },
+  { id: 'store', label: 'TMC Store' },
+]
+
+const CACHE_TTL = 5 * 60 * 1000 // 5 min
+
+export default function AppStore() {
+  const [templates, setTemplates] = useState([])
+  const [installed, setInstalled] = useState({})
+  const [busy, setBusy] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('')
+  const [tab, setTab] = useState('all')
+  const [installModal, setInstallModal] = useState(null)
+  const [configModal, setConfigModal] = useState(null)
+  const [manualInstallOpen, setManualInstallOpen] = useState(false)
+
+  async function load(force = false) {
+    setLoading(true)
+    try {
+      if (force) bust('store_templates', 'store_installed')
+      const [tmpl, inst] = await Promise.all([
+        memCache('store_templates', CACHE_TTL, api.apps.templates),
+        memCache('store_installed', 10_000, api.apps.installed),
+      ])
+      setTemplates(tmpl)
+      const map = {}
+      inst.forEach(a => { map[a.id] = a })
+      setInstalled(map)
+    } catch (e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { load() }, [])
+
+  async function act(id, fn) {
+    setBusy(b => ({ ...b, [id]: true }))
+    try { bust('store_installed'); await fn(); await load(false) }
+    catch (e) { alert(e.message) }
+    finally { setBusy(b => ({ ...b, [id]: false })) }
+  }
+
+  async function handleRefreshStore() {
+    setLoading(true)
+    bust('store_templates', 'store_installed')
+    try { await api.apps.refreshStore(); await load(true) }
+    catch (e) { console.error(e); setLoading(false) }
+  }
+
+  const filtered = templates.filter(t => {
+    const q = filter.toLowerCase()
+    const match = t.name.toLowerCase().includes(q) || (t.description || '').toLowerCase().includes(q)
+    if (tab === 'installed') return match && installed[t.id]
+    if (tab === 'local') return match && t.source !== 'tmcstore'
+    if (tab === 'store') return match && t.source === 'tmcstore'
+    return match
+  })
+
+  return (
+    <div className="p-6 space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-white">App Store</h1>
+          <p className="text-sm text-[#94a3b8] mt-0.5">
+            {Object.keys(installed).length} instalados · {templates.length} disponíveis
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => setManualInstallOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-[#6366f1] text-white rounded-lg hover:bg-[#4f46e5] text-xs transition-colors">
+            <PlusCircle size={13} />Instalar Manualmente
+          </button>
+          <button onClick={handleRefreshStore}
+            className="flex items-center gap-2 px-3 py-2 bg-[#2a2d3e] text-[#94a3b8] rounded-lg hover:text-white text-xs transition-colors">
+            <RefreshCw size={13} />Atualizar Store
+          </button>
+        </div>
+      </div>
+
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748b]" />
+        <input type="text" placeholder="Buscar apps..." value={filter} onChange={e => setFilter(e.target.value)}
+          className="w-full bg-[#1a1d27] border border-[#2a2d3e] rounded-lg pl-9 pr-4 py-2.5 text-sm text-white placeholder-[#64748b] focus:outline-none focus:border-[#6366f1]" />
+      </div>
+
+      <div className="flex gap-1 bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-1 w-fit">
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${tab === t.id ? 'bg-[#6366f1] text-white' : 'text-[#94a3b8] hover:text-white'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="text-center text-[#64748b] py-16">Carregando...</div>
+      ) : (
+        <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
+          {filtered.map(t => (
+            <AppCard key={t.id} template={t} installed={installed[t.id]}
+              onInstall={setInstallModal}
+              onUninstall={(id) => act(id, () => api.apps.uninstall(id))}
+              onStart={(id) => act(id, () => api.apps.start(id))}
+              onStop={(id) => act(id, () => api.apps.stop(id))}
+              onUpdate={(id) => { if (confirm(`Atualizar "${id}"?`)) act(id, () => api.apps.update(id)) }}
+              onConfigure={setConfigModal}
+              busy={busy[t.id]}
+            />
+          ))}
+          {filtered.length === 0 && (
+            <div className="col-span-full text-center text-[#64748b] py-12">
+              <Package size={32} className="mx-auto mb-3 opacity-30" />
+              Nenhum app encontrado
+            </div>
+          )}
+        </div>
+      )}
+
+      {installModal && (
+        <InstallModal template={installModal} onClose={() => setInstallModal(null)}
+          onDone={() => { setInstallModal(null); bust('store_installed'); load() }} />
+      )}
+      {configModal && (
+        <ReconfigureModal installed={configModal} onClose={() => setConfigModal(null)}
+          onDone={() => { setConfigModal(null); bust('store_installed'); load() }} />
+      )}
+      {manualInstallOpen && (
+        <ManualInstallModal onClose={() => setManualInstallOpen(false)}
+          onDone={() => { setManualInstallOpen(false); bust('store_installed'); load() }} />
+      )}
+    </div>
+  )
+}

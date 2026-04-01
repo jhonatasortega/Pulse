@@ -1,0 +1,23 @@
+id: filebrowser
+name: File Browser
+description: Interface web para gerenciamento de arquivos. Permite navegar, editar, fazer upload e download de arquivos no servidor.
+version: "2.31"
+category: tools
+icon: 📁
+
+docker:
+  image: filebrowser/filebrowser:latest
+  ports:
+    - "8182:80"
+  volumes:
+    - ./data:/srv
+    - ./config/filebrowser.db:/database.db
+  env:
+    - FB_BASEURL=/
+    - FB_PORT=80
+  restart: unless-stopped
+
+links:
+  - label: File Browser
+    port: 8182
+    path: /

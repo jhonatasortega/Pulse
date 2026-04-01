@@ -1,0 +1,20 @@
+id: uptime-kuma
+name: Uptime Kuma
+description: Ferramenta de monitoramento de uptime self-hosted. Monitore seus serviços com alertas via Telegram, Discord, email e mais.
+version: "1.23"
+category: monitoring
+icon: 📊
+
+docker:
+  image: louislam/uptime-kuma:latest
+  ports:
+    - "3002:3001"
+  volumes:
+    - ./data:/app/data
+  env: []
+  restart: unless-stopped
+
+links:
+  - label: Uptime Kuma
+    port: 3002
+    path: /
