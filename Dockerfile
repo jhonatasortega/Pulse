@@ -15,9 +15,13 @@ COPY apps/ /app/apps/
 # Copy pre-built frontend (built locally before docker build)
 COPY frontend/dist/ /app/frontend/dist/
 
+# Copy entrypoint
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Create data dirs
 RUN mkdir -p /app/data/apps /app/data/configs
 
 EXPOSE 3000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3000"]
+ENTRYPOINT ["/entrypoint.sh"]

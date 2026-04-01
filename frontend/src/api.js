@@ -3,10 +3,14 @@ import { auth } from './auth'
 const BASE = '/api'
 
 async function request(path, options = {}) {
-  const key = auth.getKey()
+  const key  = auth.getKey()
+  const user = auth.getUser()
+  const pass = auth.getPass()
   const headers = {
     'Content-Type': 'application/json',
-    ...(key ? { 'X-Pulse-Key': key } : {}),
+    ...(key  ? { 'X-Pulse-Key':  key  } : {}),
+    ...(user ? { 'X-Pulse-User': user.username } : {}),
+    ...(pass ? { 'X-Pulse-Pass': pass } : {}),
     ...options.headers,
   }
   const res = await fetch(`${BASE}${path}`, { ...options, headers })
@@ -27,6 +31,17 @@ export const api = {
   auth: {
     status: () => request('/auth/status'),
     verify: () => request('/auth/verify'),
+    setup: (key) => request('/auth/setup', { method: 'POST', body: JSON.stringify({ key }) }),
+    login: (username, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+    setupUser: (username, password) => request('/auth/setup-user', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  },
+
+  // Users (admin only)
+  users: {
+    list: () => request('/users/'),
+    create: (username, password, role) => request('/users/', { method: 'POST', body: JSON.stringify({ username, password, role }) }),
+    update: (username, data) => request(`/users/${username}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (username) => request(`/users/${username}`, { method: 'DELETE' }),
   },
 
   // Containers
@@ -140,4 +155,8 @@ export function logsSocket(containerId, onMessage) {
   const ws = new WebSocket(wsUrl(`/logs/ws/${containerId}`))
   ws.onmessage = (e) => onMessage(e.data)
   return ws
+}
+
+export function terminalSocket() {
+  return new WebSocket(wsUrl('/terminal/ws'))
 }

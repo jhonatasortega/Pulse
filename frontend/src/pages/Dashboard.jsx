@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, metricsSocket } from '../api'
 import { memCache, bust } from '../cache'
-import { Play, Square, RotateCw, ExternalLink, Layers, Settings, X, Image } from 'lucide-react'
+import { Play, Square, RotateCw, ExternalLink, X, Image, Upload } from 'lucide-react'
 
 function greeting() {
   const h = new Date().getHours()
@@ -34,18 +34,38 @@ function groupIcon(name) {
 }
 
 // ─── wallpaper settings panel ─────────────────────────────────────────────────
-const PRESETS = [
-  { label: 'Padrão', value: '' },
+const GRADIENT_PRESETS = [
+  { label: 'Padrão',      value: '' },
   { label: 'Azul escuro', value: 'linear-gradient(135deg,#0f0c29,#302b63,#24243e)' },
-  { label: 'Índigo', value: 'linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)' },
-  { label: 'Verde escuro', value: 'linear-gradient(135deg,#0a3d0a,#1a4a1a,#0f2a0f)' },
-  { label: 'Roxo', value: 'linear-gradient(135deg,#2d1b69,#1a0a3e,#0f0520)' },
-  { label: 'Crepúsculo', value: 'linear-gradient(135deg,#1a0533,#2d0d43,#0a1628)' },
+  { label: 'Índigo',      value: 'linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)' },
+  { label: 'Verde',       value: 'linear-gradient(135deg,#0a3d0a,#1a4a1a,#0f2a0f)' },
+  { label: 'Roxo',        value: 'linear-gradient(135deg,#2d1b69,#1a0a3e,#0f0520)' },
+  { label: 'Crepúsculo',  value: 'linear-gradient(135deg,#1a0533,#2d0d43,#0a1628)' },
+]
+
+const IMAGE_PRESETS = [
+  {
+    label: 'Flores noturnas',
+    url: 'https://png.pngtree.com/background/20230426/original/pngtree-field-of-blue-flowers-at-night-time-picture-image_2486607.jpg',
+  },
+  {
+    label: 'Pôr do sol',
+    url: 'https://www.xtrafondos.com/wallpapers/pinos-y-montanas-al-atardecer-5146.jpg',
+  },
+  {
+    label: 'Floresta',
+    url: 'https://th.bing.com/th/id/R.c4948d8a07e11b9c9b01a274a515adb1?rik=PmbX6HqLAhE83A&pid=ImgRaw&r=0',
+  },
+  {
+    label: 'Paisagem',
+    url: 'https://tse1.explicit.bing.net/th/id/OIP.nzR9I-Wxg2SslZtcV8-lnQHaEK?rs=1&pid=ImgDetMain&o=7&rm=3',
+  },
 ]
 
 function WallpaperPanel({ onClose }) {
-  const [url, setUrl] = useState(localStorage.getItem('pulse_wallpaper_url') || '')
+  const [url, setUrl]       = useState(localStorage.getItem('pulse_wallpaper_url') || '')
   const [preset, setPreset] = useState(localStorage.getItem('pulse_wallpaper_preset') || '')
+  const fileRef             = useRef(null)
 
   function apply() {
     localStorage.setItem('pulse_wallpaper_url', url)
@@ -60,17 +80,47 @@ function WallpaperPanel({ onClose }) {
     onClose()
   }
 
+  function pickImagePreset(imgUrl) {
+    setUrl(imgUrl)
+    setPreset('')
+  }
+
+  function handleFileUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => {
+      setUrl(ev.target.result)
+      setPreset('')
+    }
+    reader.readAsDataURL(file)
+  }
+
   return (
-    <div className="absolute top-12 right-0 z-50 w-72 bg-[#1a1d27]/95 backdrop-blur-md border border-[#2a2d3e] rounded-2xl p-4 shadow-2xl space-y-4">
+    <div className="absolute top-12 right-0 z-50 w-80 bg-[#1a1d27]/95 backdrop-blur-md border border-[#2a2d3e] rounded-2xl p-4 shadow-2xl space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-white">Aparência</p>
         <button onClick={onClose} className="text-[#64748b] hover:text-white"><X size={14} /></button>
       </div>
 
+      {/* Image presets thumbnails */}
+      <div>
+        <p className="text-xs text-[#64748b] mb-2">Fotos</p>
+        <div className="grid grid-cols-4 gap-2">
+          {IMAGE_PRESETS.map(p => (
+            <button key={p.url} onClick={() => pickImagePreset(p.url)} title={p.label}
+              className={`h-14 rounded-xl overflow-hidden border-2 transition-all ${url === p.url ? 'border-indigo-400 scale-105' : 'border-transparent opacity-80 hover:opacity-100'}`}
+              style={{ backgroundImage: `url(${p.url})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Gradient presets */}
       <div>
         <p className="text-xs text-[#64748b] mb-2">Gradientes</p>
         <div className="grid grid-cols-3 gap-2">
-          {PRESETS.map(p => (
+          {GRADIENT_PRESETS.map(p => (
             <button key={p.value} onClick={() => { setPreset(p.value); setUrl('') }}
               className={`h-10 rounded-lg text-[10px] text-white border transition-all ${preset === p.value && !url ? 'border-indigo-400' : 'border-[#2a2d3e]'}`}
               style={{ background: p.value || '#0f1117' }}>
@@ -80,11 +130,23 @@ function WallpaperPanel({ onClose }) {
         </div>
       </div>
 
+      {/* Custom URL */}
       <div>
-        <p className="text-xs text-[#64748b] mb-1">URL de imagem (wallpaper)</p>
-        <input value={url} onChange={e => { setUrl(e.target.value); setPreset('') }}
+        <p className="text-xs text-[#64748b] mb-1">URL personalizada</p>
+        <input value={url.startsWith('data:') ? '' : url}
+          onChange={e => { setUrl(e.target.value); setPreset('') }}
           placeholder="https://..."
           className="w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-xs rounded-lg px-3 py-2" />
+      </div>
+
+      {/* Upload from PC */}
+      <div>
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+        <button onClick={() => fileRef.current?.click()}
+          className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg border text-xs transition-all ${url.startsWith('data:') ? 'border-indigo-400 text-indigo-300 bg-indigo-500/10' : 'border-[#2a2d3e] text-[#64748b] hover:text-white hover:border-white/20'}`}>
+          <Upload size={12} />
+          {url.startsWith('data:') ? 'Imagem do PC selecionada ✓' : 'Enviar do computador'}
+        </button>
       </div>
 
       <div className="flex gap-2">

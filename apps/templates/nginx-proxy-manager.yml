@@ -1,0 +1,20 @@
+id: nginx-proxy-manager
+name: Nginx Proxy Manager
+description: Expose web services on your network with free SSL, built-in Let's Encrypt, and a beautiful web UI. Ideal for reverse proxy and load balancing.
+version: "2"
+category: tools
+icon: 🔀
+webui_port: 81
+webui_path: /
+
+docker:
+  image: jc21/nginx-proxy-manager:latest
+  ports:
+    - "80:80"
+    - "81:81"
+    - "443:443"
+  volumes:
+    - ./data/nginx-proxy-manager/data:/data
+    - ./data/nginx-proxy-manager/letsencrypt:/etc/letsencrypt
+  env: []
+  restart: unless-stopped

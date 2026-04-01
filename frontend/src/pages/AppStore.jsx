@@ -238,7 +238,75 @@ function ListField({ label, items, onChange, fields, placeholders }) {
   )
 }
 
+// ─── docker-compose parser (basic) ────────────────────────────────────────────
+function parseCompose(text) {
+  const result = { image: '', tag: 'latest', name: '', ports: [], volumes: [], env: [], network: 'bridge', restart: 'unless-stopped' }
+  if (!text) return result
+
+  // image: image:tag
+  const imgMatch = text.match(/^\s*image:\s*([^\s#\n]+)/m)
+  if (imgMatch) {
+    const full = imgMatch[1].trim()
+    const colonIdx = full.lastIndexOf(':')
+    if (colonIdx > 0 && !full.includes('/') || (colonIdx > full.lastIndexOf('/'))) {
+      result.image = full.substring(0, colonIdx)
+      result.tag   = full.substring(colonIdx + 1)
+    } else {
+      result.image = full
+    }
+  }
+
+  // container_name
+  const nameMatch = text.match(/^\s*container_name:\s*([^\s#\n]+)/m)
+  if (nameMatch) result.name = nameMatch[1].trim()
+
+  // restart
+  const restartMatch = text.match(/^\s*restart:\s*([^\s#\n]+)/m)
+  if (restartMatch) result.restart = restartMatch[1].trim()
+
+  // network_mode: host
+  if (/network_mode:\s*host/.test(text)) result.network = 'host'
+
+  // ports: - "8080:80" or - 8080:80
+  const portsSection = text.match(/^\s*ports:\s*\n((?:\s+-[^\n]+\n?)*)/m)
+  if (portsSection) {
+    const lines = portsSection[1].split('\n')
+    lines.forEach(l => {
+      const m = l.match(/-\s*["']?(\d+):(\d+)["']?/)
+      if (m) result.ports.push({ host: m[1], container: m[2], protocol: 'tcp' })
+    })
+  }
+
+  // volumes: - /host:/container
+  const volSection = text.match(/^\s*volumes:\s*\n((?:\s+-[^\n]+\n?)*)/m)
+  if (volSection) {
+    const lines = volSection[1].split('\n')
+    lines.forEach(l => {
+      const m = l.match(/-\s*["']?([^:'"]+):([^:'"#\s]+)["']?/)
+      if (m && m[1] && m[2]) result.volumes.push({ host: m[1].trim(), container: m[2].trim() })
+    })
+  }
+
+  // environment: - KEY=VALUE  or  KEY: VALUE
+  const envSection = text.match(/^\s*environment:\s*\n((?:\s+[^\n]+\n?)*)/m)
+  if (envSection) {
+    const lines = envSection[1].split('\n')
+    lines.forEach(l => {
+      // list form: - KEY=VALUE
+      let m = l.match(/-\s*([\w]+)=(.*)/)
+      if (m) { result.env.push({ key: m[1].trim(), value: m[2].trim() }); return }
+      // map form: KEY: VALUE
+      m = l.match(/^\s+([\w]+):\s*(.*)/)
+      if (m && m[1] !== 'image' && m[1] !== 'restart') result.env.push({ key: m[1].trim(), value: m[2].trim() })
+    })
+  }
+
+  return result
+}
+
 function ManualInstallModal({ onClose, onDone }) {
+  const [tab, setTab] = useState('form') // 'form' | 'compose'
+  const [composeText, setComposeText] = useState('')
   const [form, setForm] = useState({
     image: '', tag: 'latest', name: '', icon_url: '',
     network: 'bridge', restart: 'unless-stopped',
@@ -252,6 +320,22 @@ function ManualInstallModal({ onClose, onDone }) {
   const [iconErr, setIconErr] = useState(false)
 
   function setF(k, v) { setForm(f => ({ ...f, [k]: v })) }
+
+  function applyCompose() {
+    const parsed = parseCompose(composeText)
+    setForm(f => ({
+      ...f,
+      image:   parsed.image   || f.image,
+      tag:     parsed.tag     || f.tag,
+      name:    parsed.name    || f.name,
+      network: parsed.network || f.network,
+      restart: parsed.restart || f.restart,
+    }))
+    if (parsed.ports.length)   setPorts(parsed.ports)
+    if (parsed.volumes.length) setVolumes(parsed.volumes)
+    if (parsed.env.length)     setEnv(parsed.env)
+    setTab('form')
+  }
 
   async function submit(e) {
     e.preventDefault()
@@ -273,103 +357,128 @@ function ManualInstallModal({ onClose, onDone }) {
 
   return (
     <Modal title="Instalar app manualmente" onClose={onClose} wide>
-      <form onSubmit={submit} className="space-y-5">
-        {/* Image + tag */}
-        <div className="flex gap-3">
-          <div className="flex-1">
-            <label className="text-xs text-[#64748b] block mb-1">Docker Image *</label>
-            <input value={form.image} onChange={e => setF('image', e.target.value)}
-              placeholder="ghcr.io/owner/app" className={inp} />
-          </div>
-          <div className="w-28">
-            <label className="text-xs text-[#64748b] block mb-1">Tag</label>
-            <input value={form.tag} onChange={e => setF('tag', e.target.value)}
-              placeholder="latest" className={inp} />
-          </div>
+      {/* Tabs */}
+      <div className="flex gap-1 bg-[#0f1117] border border-[#2a2d3e] rounded-xl p-1 mb-5 w-fit">
+        {[{ id: 'form', label: 'Preencher manualmente' }, { id: 'compose', label: 'Colar docker-compose' }].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${tab === t.id ? 'bg-[#6366f1] text-white' : 'text-[#94a3b8] hover:text-white'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'compose' ? (
+        <div className="space-y-4">
+          <p className="text-xs text-[#64748b]">Cole seu arquivo <code className="text-indigo-400">docker-compose.yml</code> abaixo. Os campos serão preenchidos automaticamente.</p>
+          <textarea value={composeText} onChange={e => setComposeText(e.target.value)}
+            rows={16}
+            placeholder={`version: "3"\nservices:\n  myapp:\n    image: myimage:latest\n    container_name: myapp\n    ports:\n      - "8080:80"\n    volumes:\n      - ./data:/data\n    environment:\n      - MY_VAR=value\n    restart: unless-stopped`}
+            className="w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-xs font-mono rounded-lg px-3 py-3 resize-none focus:outline-none focus:border-[#6366f1]"
+          />
+          <button onClick={applyCompose} disabled={!composeText.trim()}
+            className="w-full py-2.5 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#4f46e5] disabled:opacity-40">
+            Importar e preencher formulário →
+          </button>
         </div>
-
-        {/* Name + icon */}
-        <div className="flex gap-3 items-end">
-          <div className="flex-1">
-            <label className="text-xs text-[#64748b] block mb-1">Nome do App *</label>
-            <input value={form.name} onChange={e => setF('name', e.target.value)}
-              placeholder="meu-app" className={inp} />
+      ) : (
+        <form onSubmit={submit} className="space-y-5">
+          {/* Image + tag */}
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="text-xs text-[#64748b] block mb-1">Docker Image *</label>
+              <input value={form.image} onChange={e => setF('image', e.target.value)}
+                placeholder="ghcr.io/owner/app" className={inp} />
+            </div>
+            <div className="w-28">
+              <label className="text-xs text-[#64748b] block mb-1">Tag</label>
+              <input value={form.tag} onChange={e => setF('tag', e.target.value)}
+                placeholder="latest" className={inp} />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            {form.icon_url && !iconErr && (
-              <img src={form.icon_url} onError={() => setIconErr(true)}
-                className="w-9 h-9 rounded-xl object-cover bg-[#2a2d3e]" />
-            )}
+
+          {/* Name + icon */}
+          <div className="flex gap-3 items-end">
+            <div className="flex-1">
+              <label className="text-xs text-[#64748b] block mb-1">Nome do App *</label>
+              <input value={form.name} onChange={e => setF('name', e.target.value)}
+                placeholder="meu-app" className={inp} />
+            </div>
+            <div className="flex items-center gap-2">
+              {form.icon_url && !iconErr && (
+                <img src={form.icon_url} onError={() => setIconErr(true)}
+                  className="w-9 h-9 rounded-xl object-cover bg-[#2a2d3e]" />
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Icon URL */}
-        <div>
-          <label className="text-xs text-[#64748b] block mb-1">Icon URL</label>
-          <input value={form.icon_url} onChange={e => { setF('icon_url', e.target.value); setIconErr(false) }}
-            placeholder="https://..." className={inp} />
-        </div>
-
-        {/* Web UI */}
-        <div>
-          <label className="text-xs text-[#64748b] block mb-1">Web UI</label>
-          <div className="flex gap-2">
-            <select value={form.network === 'host' ? 'host' : 'http'}
-              className="bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-2 py-2 w-20">
-              <option value="http">http://</option>
-              <option value="https">https://</option>
-            </select>
-            <input value={form.webui_port} onChange={e => setF('webui_port', e.target.value)}
-              placeholder="Porta" className="w-24 bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2" />
-            <input value={form.webui_path} onChange={e => setF('webui_path', e.target.value)}
-              placeholder="/" className="flex-1 bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2" />
+          {/* Icon URL */}
+          <div>
+            <label className="text-xs text-[#64748b] block mb-1">Icon URL</label>
+            <input value={form.icon_url} onChange={e => { setF('icon_url', e.target.value); setIconErr(false) }}
+              placeholder="https://..." className={inp} />
           </div>
-        </div>
 
-        {/* Network + restart */}
-        <div className="flex gap-3">
-          <div className="flex-1">
-            <label className="text-xs text-[#64748b] block mb-1">Network</label>
-            <select value={form.network} onChange={e => setF('network', e.target.value)}
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2">
-              <option value="bridge">bridge</option>
-              <option value="host">host</option>
-              <option value="none">none</option>
-            </select>
+          {/* Web UI */}
+          <div>
+            <label className="text-xs text-[#64748b] block mb-1">Web UI</label>
+            <div className="flex gap-2">
+              <select value={form.network === 'host' ? 'host' : 'http'}
+                className="bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-2 py-2 w-20">
+                <option value="http">http://</option>
+                <option value="https">https://</option>
+              </select>
+              <input value={form.webui_port} onChange={e => setF('webui_port', e.target.value)}
+                placeholder="Porta" className="w-24 bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2" />
+              <input value={form.webui_path} onChange={e => setF('webui_path', e.target.value)}
+                placeholder="/" className="flex-1 bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2" />
+            </div>
           </div>
-          <div className="flex-1">
-            <label className="text-xs text-[#64748b] block mb-1">Restart</label>
-            <select value={form.restart} onChange={e => setF('restart', e.target.value)}
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2">
-              <option value="unless-stopped">unless-stopped</option>
-              <option value="always">always</option>
-              <option value="on-failure">on-failure</option>
-              <option value="no">no</option>
-            </select>
+
+          {/* Network + restart */}
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="text-xs text-[#64748b] block mb-1">Network</label>
+              <select value={form.network} onChange={e => setF('network', e.target.value)}
+                className="w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2">
+                <option value="bridge">bridge</option>
+                <option value="host">host</option>
+                <option value="none">none</option>
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="text-xs text-[#64748b] block mb-1">Restart</label>
+              <select value={form.restart} onChange={e => setF('restart', e.target.value)}
+                className="w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2">
+                <option value="unless-stopped">unless-stopped</option>
+                <option value="always">always</option>
+                <option value="on-failure">on-failure</option>
+                <option value="no">no</option>
+              </select>
+            </div>
           </div>
-        </div>
 
-        {/* Ports */}
-        <ListField label="Ports" items={ports} onChange={setPorts}
-          fields={['host', 'container', 'protocol']}
-          placeholders={{ host: 'Host', container: 'Container', protocol: 'tcp' }} />
+          {/* Ports */}
+          <ListField label="Ports" items={ports} onChange={setPorts}
+            fields={['host', 'container', 'protocol']}
+            placeholders={{ host: 'Host', container: 'Container', protocol: 'tcp' }} />
 
-        {/* Volumes */}
-        <ListField label="Volumes" items={volumes} onChange={setVolumes}
-          fields={['host', 'container']}
-          placeholders={{ host: '/host/path', container: '/container/path' }} />
+          {/* Volumes */}
+          <ListField label="Volumes" items={volumes} onChange={setVolumes}
+            fields={['host', 'container']}
+            placeholders={{ host: '/host/path', container: '/container/path' }} />
 
-        {/* Env vars */}
-        <ListField label="Environment Variables" items={env} onChange={setEnv}
-          fields={['key', 'value']}
-          placeholders={{ key: 'KEY', value: 'value' }} />
+          {/* Env vars */}
+          <ListField label="Environment Variables" items={env} onChange={setEnv}
+            fields={['key', 'value']}
+            placeholders={{ key: 'KEY', value: 'value' }} />
 
-        {error && <p className="text-xs text-red-400">{error}</p>}
-        <button type="submit" disabled={loading}
-          className="w-full py-2.5 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#4f46e5] disabled:opacity-40">
-          {loading ? 'Instalando (pode demorar)...' : 'Instalar'}
-        </button>
-      </form>
+          {error && <p className="text-xs text-red-400">{error}</p>}
+          <button type="submit" disabled={loading}
+            className="w-full py-2.5 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#4f46e5] disabled:opacity-40">
+            {loading ? 'Instalando (pode demorar)...' : 'Instalar'}
+          </button>
+        </form>
+      )}
     </Modal>
   )
 }
