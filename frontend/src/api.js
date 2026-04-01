@@ -120,18 +120,6 @@ export const api = {
     downloadUrl: (path) => `/api/files/download?path=${encodeURIComponent(path)}`,
   },
 
-  // Agents
-  agents: {
-    list: () => request('/agents/'),
-    get: (id) => request(`/agents/${id}`),
-    actions: (id) => request(`/agents/${id}/actions`),
-    dispatch: (id, action, params = {}) =>
-      request(`/agents/${id}/dispatch`, {
-        method: 'POST',
-        body: JSON.stringify({ action, params }),
-      }),
-    reload: () => request('/agents/reload', { method: 'POST' }),
-  },
 }
 
 // WebSocket helpers — inject key as query param

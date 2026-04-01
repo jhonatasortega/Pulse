@@ -16,17 +16,13 @@ class SPAStaticFiles(StaticFiles):
         except Exception:
             return FileResponse(Path(self.directory) / "index.html")
 
-from api.routes import containers, apps, metrics, logs, agents, system, groups, storage, files
-from api.auth import verify_key, auth_enabled
-from agents_loader.loader import AgentLoader
 
-agent_loader = AgentLoader(agents_dir="/app/agents")
+from api.routes import containers, apps, metrics, logs, system, groups, storage, files
+from api.auth import verify_key, auth_enabled
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    agent_loader.load_all()
-    print(f"[Pulse] Loaded {len(agent_loader.agents)} agents")
     yield
 
 
@@ -51,7 +47,6 @@ app.include_router(containers.router, prefix="/api/containers", tags=["container
 app.include_router(apps.router, prefix="/api/apps", tags=["apps"])
 app.include_router(metrics.router, prefix="/api/metrics", tags=["metrics"])
 app.include_router(logs.router, prefix="/api/logs", tags=["logs"])
-app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(system.router, prefix="/api/system", tags=["system"])
 app.include_router(groups.router, prefix="/api/groups", tags=["groups"])
 app.include_router(storage.router, prefix="/api/storage", tags=["storage"])

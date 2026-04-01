@@ -9,9 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend source
 COPY core/ /app/
 
-# Copy apps templates and agents
+# Copy app templates
 COPY apps/ /app/apps/
-COPY agents/ /app/agents/
 
 # Copy pre-built frontend (built locally before docker build)
 COPY frontend/dist/ /app/frontend/dist/
