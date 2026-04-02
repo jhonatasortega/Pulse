@@ -1,9 +1,15 @@
 #!/bin/bash
-# Deploy Pulse to Raspberry Pi
-# Usage: ./deploy.sh [user@host]
+# Deploy Pulse to a remote server
+# Usage: ./deploy.sh user@host [remote_dir]
 
-TARGET=${1:-"jortega@192.168.0.233"}
-REMOTE_DIR="/home/jortega/pulse"
+if [ -z "$1" ]; then
+  echo "Usage: ./deploy.sh user@host [remote_dir]"
+  echo "Example: ./deploy.sh pi@192.168.0.100 /home/pi/pulse"
+  exit 1
+fi
+
+TARGET="$1"
+REMOTE_DIR="${2:-"/opt/pulse"}"
 
 echo "==> Deploying Pulse to $TARGET:$REMOTE_DIR"
 
@@ -20,11 +26,9 @@ rsync -avz --progress \
   --exclude '.git' \
   . "$TARGET:$REMOTE_DIR/"
 
-echo "==> Starting containers on Pi..."
+echo "==> Starting containers..."
 ssh "$TARGET" "cd $REMOTE_DIR && docker compose pull --quiet 2>/dev/null; docker compose up -d --build"
 
 echo ""
-echo "✓ Pulse deployed!"
-echo "  Backend:  http://192.168.0.233:3000"
-echo "  Frontend: http://192.168.0.233:3001"
-echo "  API Docs: http://192.168.0.233:3000/docs"
+echo "Pulse deployed to $TARGET"
+echo "  Access: http://$(echo $TARGET | cut -d@ -f2):3000"

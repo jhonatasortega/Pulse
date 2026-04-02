@@ -12,7 +12,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /mnt:/mnt:rshared
       - /media:/media:rshared
-      - /home/jortega:/home/jortega
+      - /home:/home:rshared
     environment:
       - PYTHONUNBUFFERED=1
       - PULSE_DATA_DIR=/app/data
