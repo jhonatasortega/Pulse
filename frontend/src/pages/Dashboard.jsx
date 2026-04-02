@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, metricsSocket } from '../api'
 import { memCache, bust } from '../cache'
+import { auth } from '../auth'
 import { Play, Square, RotateCw, ExternalLink, X, Image, Upload } from 'lucide-react'
 
 function greeting() {
@@ -45,20 +46,20 @@ const GRADIENT_PRESETS = [
 
 const IMAGE_PRESETS = [
   {
-    label: 'Flores noturnas',
-    url: 'https://png.pngtree.com/background/20230426/original/pngtree-field-of-blue-flowers-at-night-time-picture-image_2486607.jpg',
-  },
-  {
-    label: 'Pôr do sol',
-    url: 'https://www.xtrafondos.com/wallpapers/pinos-y-montanas-al-atardecer-5146.jpg',
+    label: 'Nebulosa',
+    url: 'https://images6.alphacoders.com/109/thumb-1920-1096452.jpg',
   },
   {
     label: 'Floresta',
     url: 'https://th.bing.com/th/id/R.c4948d8a07e11b9c9b01a274a515adb1?rik=PmbX6HqLAhE83A&pid=ImgRaw&r=0',
   },
   {
+    label: 'Pôr do sol',
+    url: 'https://www.xtrafondos.com/wallpapers/pinos-y-montanas-al-atardecer-5146.jpg',
+  },
+  {
     label: 'Paisagem',
-    url: 'https://tse1.explicit.bing.net/th/id/OIP.nzR9I-Wxg2SslZtcV8-lnQHaEK?rs=1&pid=ImgDetMain&o=7&rm=3',
+    url: 'https://images8.alphacoders.com/984/thumb-1920-984617.jpg',
   },
 ]
 
@@ -291,7 +292,9 @@ export default function Dashboard() {
       <div className="relative z-10 p-8 space-y-8">
         {/* Header row */}
         <div className="flex items-start justify-between pt-4">
-          <p className="text-3xl font-bold text-white drop-shadow">{greeting()}, Jhonatas.</p>
+          <p className="text-3xl font-bold text-white drop-shadow">
+            {greeting()}{auth.getUser()?.display_name ? `, ${auth.getUser().display_name}` : ''}.
+          </p>
           <div className="relative" ref={settingsRef}>
             <button onClick={() => setSettingsOpen(o => !o)}
               className={`p-2 rounded-xl transition-colors ${settingsOpen ? 'bg-[#6366f1] text-white' : 'bg-black/20 backdrop-blur-sm text-[#94a3b8] hover:text-white'}`}

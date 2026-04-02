@@ -111,6 +111,7 @@ class LoginRequest(BaseModel):
 class SetupUserRequest(BaseModel):
     username: str
     password: str
+    display_name: str = ""
 
 
 @app.post("/api/auth/login", dependencies=[])
@@ -121,7 +122,7 @@ async def auth_login(req: LoginRequest):
     user = verify_password(req.username, req.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"username": user["username"], "role": user["role"]}
+    return {"username": user["username"], "role": user["role"], "display_name": user.get("display_name", user["username"])}
 
 
 @app.post("/api/auth/setup-user", dependencies=[])
@@ -132,8 +133,8 @@ async def auth_setup_user(req: SetupUserRequest):
         raise HTTPException(status_code=400, detail="Users already configured")
     if len(req.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
-    user = create_user(req.username, req.password, "admin")
-    return {"username": user["username"], "role": user["role"]}
+    user = create_user(req.username, req.password, "admin", req.display_name or req.username)
+    return {"username": user["username"], "role": user["role"], "display_name": user["display_name"]}
 
 
 # Static files mount LAST — catch-all, must come after all API routes

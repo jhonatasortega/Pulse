@@ -33,7 +33,7 @@ export const api = {
     verify: () => request('/auth/verify'),
     setup: (key) => request('/auth/setup', { method: 'POST', body: JSON.stringify({ key }) }),
     login: (username, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
-    setupUser: (username, password) => request('/auth/setup-user', { method: 'POST', body: JSON.stringify({ username, password }) }),
+    setupUser: (username, password, display_name) => request('/auth/setup-user', { method: 'POST', body: JSON.stringify({ username, password, display_name }) }),
   },
 
   // Users (admin only)
@@ -137,11 +137,17 @@ export const api = {
 
 }
 
-// WebSocket helpers — inject key as query param
+// WebSocket helpers — inject auth as query params (headers not supported by browsers for WS)
 function wsUrl(path) {
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
-  const key = auth.getKey()
-  const qs = key ? `?key=${encodeURIComponent(key)}` : ''
+  const params = new URLSearchParams()
+  const key  = auth.getKey()
+  const user = auth.getUser()
+  const pass = auth.getPass()
+  if (key)  params.set('key',  key)
+  if (user) params.set('user', user.username)
+  if (pass) params.set('pass', pass)
+  const qs = params.toString() ? `?${params.toString()}` : ''
   return `${protocol}://${location.host}/api${path}${qs}`
 }
 

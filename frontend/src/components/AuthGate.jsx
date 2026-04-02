@@ -13,22 +13,28 @@ function Background() {
   )
 }
 
-// ─── First-access: create admin user (multi-user mode) ────────────────────────
+// ─── First-access: create admin user ─────────────────────────────────────────
 function SetupUserScreen({ onDone }) {
-  const [username, setUsername] = useState('admin')
-  const [password, setPassword] = useState('')
-  const [confirm, setConfirm]   = useState('')
-  const [show, setShow]         = useState(false)
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [username,    setUsername]    = useState('')
+  const [password,    setPassword]    = useState('')
+  const [confirm,     setConfirm]     = useState('')
+  const [show,        setShow]        = useState(false)
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState('')
+
+  // Auto-derive username from display name
+  const derivedUser = displayName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'admin'
 
   async function submit(e) {
     e.preventDefault()
     if (password !== confirm) { setError('As senhas não coincidem'); return }
     if (password.length < 8)  { setError('Mínimo 8 caracteres');    return }
+    if (!displayName.trim())  { setError('Informe seu nome');        return }
     setLoading(true); setError('')
+    const finalUser = username.trim() || derivedUser
     try {
-      const user = await api.auth.setupUser(username, password)
+      const user = await api.auth.setupUser(finalUser, password, displayName.trim())
       auth.setUser(user, true)
       auth.setPass(password, true)
       onDone()
@@ -52,13 +58,23 @@ function SetupUserScreen({ onDone }) {
       </div>
 
       <form onSubmit={submit} className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl space-y-4">
+        {/* Display name — shown in greeting */}
         <div>
-          <label className="text-xs text-white/50 mb-1.5 block">Nome de usuário</label>
+          <label className="text-xs text-white/50 mb-1.5 block">Seu nome</label>
           <div className="relative">
             <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
-            <input type="text" value={username} onChange={e => setUsername(e.target.value)}
-              placeholder="admin" className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-indigo-400/60 transition-colors" autoFocus />
+            <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)}
+              placeholder="Ex: João Silva"
+              className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-indigo-400/60 transition-colors"
+              autoFocus />
           </div>
+        </div>
+
+        {/* Username — auto-derived, editable */}
+        <div>
+          <label className="text-xs text-white/50 mb-1.5 block">Login <span className="text-white/25">(preenchido automaticamente)</span></label>
+          <input type="text" value={username} onChange={e => setUsername(e.target.value)}
+            placeholder={derivedUser} className={inp} />
         </div>
 
         <div className="relative">
@@ -92,7 +108,7 @@ function SetupUserScreen({ onDone }) {
 
         {error && <p className="text-xs text-red-400">{error}</p>}
 
-        <button type="submit" disabled={!username || !password || !confirm || loading}
+        <button type="submit" disabled={!displayName || !password || !confirm || loading}
           className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-40">
           {loading ? 'Criando conta...' : 'Criar conta e entrar'}
         </button>
@@ -386,10 +402,9 @@ export default function AuthGate({ children }) {
     <div className="relative flex h-screen items-center justify-center bg-[#0a0c12] overflow-hidden">
       <Background />
       <div className="relative z-10 w-full flex justify-center">
-        {status.setup_required && status.multi_user  ? <SetupUserScreen onDone={() => setVerified(true)} /> :
-         status.setup_required && !status.multi_user ? <SetupKeyScreen  onDone={() => setVerified(true)} /> :
-         status.multi_user                           ? <LoginUserScreen onDone={() => setVerified(true)} /> :
-                                                       <LoginKeyScreen  onDone={() => setVerified(true)} />}
+        {status.setup_required ? <SetupUserScreen onDone={() => setVerified(true)} /> :
+         status.multi_user    ? <LoginUserScreen onDone={() => setVerified(true)} /> :
+                                <LoginKeyScreen  onDone={() => setVerified(true)} />}
       </div>
     </div>
   )

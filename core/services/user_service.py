@@ -40,7 +40,7 @@ def _save_users(users: dict) -> None:
 def list_users() -> list:
     users = _load_users()
     return [
-        {"username": u, "role": v["role"]}
+        {"username": u, "role": v["role"], "display_name": v.get("display_name", u)}
         for u, v in users.items()
     ]
 
@@ -49,7 +49,7 @@ def get_user(username: str) -> Optional[dict]:
     return _load_users().get(username)
 
 
-def create_user(username: str, password: str, role: str = "viewer") -> dict:
+def create_user(username: str, password: str, role: str = "viewer", display_name: str = "") -> dict:
     if role not in ROLES:
         raise ValueError(f"Invalid role: {role}")
     users = _load_users()
@@ -57,12 +57,13 @@ def create_user(username: str, password: str, role: str = "viewer") -> dict:
         raise ValueError(f"User '{username}' already exists")
     salt = secrets.token_hex(16)
     users[username] = {
-        "role":     role,
-        "salt":     salt,
-        "password": _hash_password(password, salt),
+        "role":         role,
+        "display_name": display_name or username,
+        "salt":         salt,
+        "password":     _hash_password(password, salt),
     }
     _save_users(users)
-    return {"username": username, "role": role}
+    return {"username": username, "role": role, "display_name": users[username]["display_name"]}
 
 
 def update_user(username: str, password: Optional[str] = None, role: Optional[str] = None) -> dict:
@@ -97,7 +98,7 @@ def verify_password(username: str, password: str) -> Optional[dict]:
     expected = _hash_password(password, user["salt"])
     if not secrets.compare_digest(expected, user["password"]):
         return None
-    return {"username": username, "role": user["role"]}
+    return {"username": username, "role": user["role"], "display_name": user.get("display_name", username)}
 
 
 def any_users_exist() -> bool:

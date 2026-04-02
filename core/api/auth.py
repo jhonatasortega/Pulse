@@ -4,9 +4,9 @@ Auth module — supports two modes:
 1. API-key mode (legacy): PULSE_API_KEY env var or /app/data/auth.json
 2. Multi-user mode: users stored in /app/data/users.json
 
-Multi-user mode activates when users.json exists and has entries.
-In multi-user mode the frontend sends  X-Pulse-User: username
-and  X-Pulse-Pass: password  (base64 NOT used — sent over HTTPS/LAN).
+Credentials can arrive as:
+  - HTTP headers:  X-Pulse-Key, X-Pulse-User, X-Pulse-Pass
+  - Query params:  ?key=, ?user=, ?pass=   (used by WebSocket — browsers can't send WS headers)
 
 Role enforcement:
   admin  → all methods
@@ -16,13 +16,13 @@ import json
 import os
 import secrets
 from pathlib import Path
-from fastapi import Header, HTTPException, Request
+from fastapi import HTTPException, Request
 
 _DATA_DIR = Path(os.getenv("PULSE_DATA_DIR", "/app/data"))
 _AUTH_FILE = _DATA_DIR / "auth.json"
 
 
-# ─── API-key helpers (legacy / single-user) ───────────────────────────────────
+# ─── API-key helpers ─────────────────────────────────────────────────────────
 
 def _load_key_from_file() -> str:
     try:
@@ -53,76 +53,69 @@ def save_key(key: str) -> None:
     _AUTH_FILE.write_text(json.dumps({"key": key}))
 
 
-# ─── Multi-user helpers ───────────────────────────────────────────────────────
+# ─── Credential extraction (headers OR query params) ─────────────────────────
 
-def _multi_user_mode() -> bool:
-    from services.user_service import any_users_exist
-    return any_users_exist()
+def _extract_credentials(request: Request) -> tuple[str, str, str]:
+    """Returns (api_key, username, password) from headers or query params."""
+    q = request.query_params
+    h = request.headers
+    api_key  = h.get("x-pulse-key")  or q.get("key")  or ""
+    username = h.get("x-pulse-user") or q.get("user") or ""
+    password = h.get("x-pulse-pass") or q.get("pass") or ""
+    return api_key, username, password
 
 
-def _get_current_user(
-    x_pulse_key:  str = Header(default=None),
-    x_pulse_user: str = Header(default=None),
-    x_pulse_pass: str = Header(default=None),
-) -> dict | None:
+def _resolve_user(request: Request) -> dict | None:
     """
     Returns user dict {"username": ..., "role": ...} or None if anonymous.
     Raises 401 if credentials are provided but wrong.
     """
-    if _multi_user_mode():
-        if x_pulse_user and x_pulse_pass:
+    api_key, username, password = _extract_credentials(request)
+
+    from services.user_service import any_users_exist
+    if any_users_exist():
+        if username and password:
             from services.user_service import verify_password
-            user = verify_password(x_pulse_user, x_pulse_pass)
+            user = verify_password(username, password)
             if not user:
                 raise HTTPException(status_code=401, detail="Invalid credentials")
             return user
-        # In multi-user mode, unauthenticated = not allowed
-        return None
+        return None  # unauthenticated in multi-user mode
 
     # API-key mode
-    api_key = _get_api_key()
-    if not api_key:
-        return {"username": "admin", "role": "admin"}  # no auth
-    if x_pulse_key and secrets.compare_digest(x_pulse_key, api_key):
+    key = _get_api_key()
+    if not key:
+        return {"username": "admin", "role": "admin"}  # open access
+    if api_key and secrets.compare_digest(api_key, key):
         return {"username": "admin", "role": "admin"}
     return None
 
 
 # ─── FastAPI dependencies ─────────────────────────────────────────────────────
 
-def verify_key(
-    request: Request,
-    x_pulse_key:  str = Header(default=None),
-    x_pulse_user: str = Header(default=None),
-    x_pulse_pass: str = Header(default=None),
-):
-    """Global auth dependency — allows access or raises 401."""
+def verify_key(request: Request):
+    """Global auth dependency — allows access or raises 401/403."""
     if not auth_enabled():
-        return  # open access
+        return
 
-    user = _get_current_user(x_pulse_key, x_pulse_user, x_pulse_pass)
+    user = _resolve_user(request)
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    # Viewer role: block mutation methods
-    if user["role"] == "viewer" and request.method not in ("GET", "HEAD", "OPTIONS"):
+    # Viewer: block mutation methods (WebSocket connections always pass — they're read-only streams)
+    is_ws = request.scope.get("type") == "websocket"
+    if user["role"] == "viewer" and not is_ws and request.method not in ("GET", "HEAD", "OPTIONS"):
         raise HTTPException(status_code=403, detail="Viewers cannot perform write operations")
 
-    # Attach user to request state for downstream use
     request.state.user = user
 
 
-def require_admin(
-    request: Request,
-    x_pulse_key:  str = Header(default=None),
-    x_pulse_user: str = Header(default=None),
-    x_pulse_pass: str = Header(default=None),
-):
+def require_admin(request: Request):
     """Dependency that requires admin role."""
     if not auth_enabled():
         return
 
-    user = _get_current_user(x_pulse_key, x_pulse_user, x_pulse_pass)
+    user = _resolve_user(request)
     if user is None or user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
 
