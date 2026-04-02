@@ -6,17 +6,17 @@ Auth module — supports two modes:
 
 Credentials can arrive as:
   - HTTP headers:  X-Pulse-Key, X-Pulse-User, X-Pulse-Pass
-  - Query params:  ?key=, ?user=, ?pass=   (used by WebSocket — browsers can't send WS headers)
+  - Query params:  ?key=, ?user=, ?pass=   (WebSocket — browsers can't send WS custom headers)
 
-Role enforcement:
-  admin  → all methods
-  viewer → GET / WebSocket only (write operations return 403)
+HTTPConnection is the base class for both Request and WebSocket,
+so this dependency works for all connection types.
 """
 import json
 import os
 import secrets
 from pathlib import Path
-from fastapi import HTTPException, Request
+from fastapi import HTTPException
+from starlette.requests import HTTPConnection
 
 _DATA_DIR = Path(os.getenv("PULSE_DATA_DIR", "/app/data"))
 _AUTH_FILE = _DATA_DIR / "auth.json"
@@ -53,24 +53,20 @@ def save_key(key: str) -> None:
     _AUTH_FILE.write_text(json.dumps({"key": key}))
 
 
-# ─── Credential extraction (headers OR query params) ─────────────────────────
+# ─── Credential extraction ────────────────────────────────────────────────────
 
-def _extract_credentials(request: Request) -> tuple[str, str, str]:
+def _get_creds(conn: HTTPConnection):
     """Returns (api_key, username, password) from headers or query params."""
-    q = request.query_params
-    h = request.headers
-    api_key  = h.get("x-pulse-key")  or q.get("key")  or ""
-    username = h.get("x-pulse-user") or q.get("user") or ""
-    password = h.get("x-pulse-pass") or q.get("pass") or ""
+    h = conn.headers
+    q = conn.query_params
+    api_key  = h.get("x-pulse-key")  or q.get("key",  "")
+    username = h.get("x-pulse-user") or q.get("user", "")
+    password = h.get("x-pulse-pass") or q.get("pass", "")
     return api_key, username, password
 
 
-def _resolve_user(request: Request) -> dict | None:
-    """
-    Returns user dict {"username": ..., "role": ...} or None if anonymous.
-    Raises 401 if credentials are provided but wrong.
-    """
-    api_key, username, password = _extract_credentials(request)
+def _resolve_user(conn: HTTPConnection) -> dict | None:
+    api_key, username, password = _get_creds(conn)
 
     from services.user_service import any_users_exist
     if any_users_exist():
@@ -80,12 +76,11 @@ def _resolve_user(request: Request) -> dict | None:
             if not user:
                 raise HTTPException(status_code=401, detail="Invalid credentials")
             return user
-        return None  # unauthenticated in multi-user mode
+        return None
 
-    # API-key mode
     key = _get_api_key()
     if not key:
-        return {"username": "admin", "role": "admin"}  # open access
+        return {"username": "admin", "role": "admin"}
     if api_key and secrets.compare_digest(api_key, key):
         return {"username": "admin", "role": "admin"}
     return None
@@ -93,29 +88,30 @@ def _resolve_user(request: Request) -> dict | None:
 
 # ─── FastAPI dependencies ─────────────────────────────────────────────────────
 
-def verify_key(request: Request):
-    """Global auth dependency — allows access or raises 401/403."""
+def verify_key(conn: HTTPConnection):
+    """Global auth dependency — works for HTTP and WebSocket."""
     if not auth_enabled():
         return
 
-    user = _resolve_user(request)
+    user = _resolve_user(conn)
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    # Viewer: block mutation methods (WebSocket connections always pass — they're read-only streams)
-    is_ws = request.scope.get("type") == "websocket"
-    if user["role"] == "viewer" and not is_ws and request.method not in ("GET", "HEAD", "OPTIONS"):
+    # Viewer: block mutation methods (WebSocket is always read-only)
+    is_ws = conn.scope.get("type") == "websocket"
+    method = conn.scope.get("method", "GET")
+    if user["role"] == "viewer" and not is_ws and method not in ("GET", "HEAD", "OPTIONS"):
         raise HTTPException(status_code=403, detail="Viewers cannot perform write operations")
 
-    request.state.user = user
+    conn.state.user = user
 
 
-def require_admin(request: Request):
+def require_admin(conn: HTTPConnection):
     """Dependency that requires admin role."""
     if not auth_enabled():
         return
 
-    user = _resolve_user(request)
+    user = _resolve_user(conn)
     if user is None or user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
 

@@ -61,6 +61,16 @@ export const api = {
       }),
   },
 
+  // Stores
+  stores: {
+    list: () => request('/stores/'),
+    add: (store) => request('/stores/', { method: 'POST', body: JSON.stringify(store) }),
+    remove: (id) => request(`/stores/${id}`, { method: 'DELETE' }),
+    toggle: (id, enabled) => request(`/stores/${id}/toggle`, { method: 'PUT', body: JSON.stringify({ enabled }) }),
+    refresh: (id) => request(`/stores/${id}/refresh`, { method: 'POST' }),
+    refreshAll: () => request('/stores/refresh-all', { method: 'POST' }),
+  },
+
   // Apps
   apps: {
     templates: () => request('/apps/templates'),

@@ -83,20 +83,32 @@ async def terminal_ws(websocket: WebSocket):
             pass
 
     try:
-        async for msg in websocket.iter_bytes():
-            # Resize packet: first byte \x01 followed by JSON
-            if msg[:1] == b'\x01':
+        while True:
+            msg = await websocket.receive()
+
+            if msg["type"] == "websocket.disconnect":
+                break
+
+            # Binary frames = keystrokes
+            if msg.get("bytes"):
                 try:
-                    info = json.loads(msg[1:])
-                    if info.get("type") == "resize":
-                        set_winsize(info.get("cols", 80), info.get("rows", 24))
-                except Exception:
-                    pass
-            else:
-                try:
-                    os.write(master_fd, msg)
+                    os.write(master_fd, msg["bytes"])
                 except OSError:
                     break
+
+            # Text frames = resize or fallback keystrokes
+            elif msg.get("text"):
+                text = msg["text"]
+                try:
+                    info = json.loads(text)
+                    if info.get("type") == "resize":
+                        set_winsize(info.get("cols", 80), info.get("rows", 24))
+                except json.JSONDecodeError:
+                    try:
+                        os.write(master_fd, text.encode())
+                    except OSError:
+                        break
+
     except WebSocketDisconnect:
         pass
     except Exception:

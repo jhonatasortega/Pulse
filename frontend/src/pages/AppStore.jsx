@@ -4,6 +4,7 @@ import { memCache, bust } from '../cache'
 import {
   Download, Trash2, Play, Square, RefreshCw, Package,
   Settings, ArrowUpCircle, X, Search, Plus, PlusCircle,
+  Store, ToggleLeft, ToggleRight, ExternalLink,
 } from 'lucide-react'
 
 const categoryColors = {
@@ -50,9 +51,9 @@ function AppIcon({ template, size = 'lg' }) {
 // ─── generic modal wrapper ────────────────────────────────────────────────────
 function Modal({ title, onClose, children, wide }) {
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className={`bg-[#1a1d27] border border-[#2a2d3e] rounded-xl w-full ${wide ? 'max-w-2xl' : 'max-w-md'} my-4`}>
-        <div className="px-5 py-4 border-b border-[#2a2d3e] flex items-center justify-between">
+    <div className="absolute inset-0 bg-black/70 z-50 flex items-start justify-center p-4 overflow-y-auto">
+      <div className={`bg-[#1a1d27] border border-[#2a2d3e] rounded-xl w-full ${wide ? 'max-w-2xl' : 'max-w-md'} my-4 flex-shrink-0`}>
+        <div className="px-5 py-4 border-b border-[#2a2d3e] flex items-center justify-between sticky top-0 bg-[#1a1d27] rounded-t-xl z-10">
           <h2 className="text-sm font-semibold text-white">{title}</h2>
           <button onClick={onClose} className="text-[#94a3b8] hover:text-white"><X size={18} /></button>
         </div>
@@ -62,53 +63,122 @@ function Modal({ title, onClose, children, wide }) {
   )
 }
 
+// ─── helpers to build compose yaml from template ─────────────────────────────
+function templateToComposeYaml(template) {
+  const d = template.docker || {}
+  const svcName = (template.name || 'app').toLowerCase().replace(/[^a-z0-9]/g, '_')
+  const ports   = (d.ports  || []).map(p => `      - "${p}"`).join('\n')
+  const volumes = (d.volumes|| []).map(v => `      - ${v}`).join('\n')
+  const envLines = (d.env   || []).map(e => `      - ${e}`).join('\n')
+  return [
+    `services:`,
+    `  ${svcName}:`,
+    `    image: ${d.image || 'image:latest'}`,
+    `    container_name: ${svcName}`,
+    `    restart: ${d.restart || 'unless-stopped'}`,
+    ports   ? `    ports:\n${ports}`   : null,
+    volumes ? `    volumes:\n${volumes}` : null,
+    envLines? `    environment:\n${envLines}` : null,
+  ].filter(Boolean).join('\n')
+}
+
 // ─── install modal (template-based) ──────────────────────────────────────────
 function InstallModal({ template, onClose, onDone }) {
-  const [fields, setFields] = useState(() => {
+  const [mode, setMode]       = useState('form') // 'form' | 'compose'
+  const [fields, setFields]   = useState(() => {
     const init = {}
     ;(template.docker?.env || []).forEach(e => {
       if (e.includes('=')) { const [k, v] = e.split('=', 2); init[k] = v }
     })
     return init
   })
+  const [composeYaml, setComposeYaml] = useState(() => templateToComposeYaml(template))
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError]     = useState('')
   const envDefs = template.docker?.env || []
 
-  async function submit(e) {
+  async function submitForm(e) {
     e.preventDefault(); setLoading(true); setError('')
     try { await api.apps.install(template.id, fields); onDone() }
     catch (err) { setError(err.message) }
     finally { setLoading(false) }
   }
 
+  async function submitCompose(e) {
+    e.preventDefault()
+    // Parse the edited compose and send as customInstall
+    const parsed = parseCompose(composeYaml)
+    if (!parsed.image) { setError('Imagem não encontrada no compose'); return }
+    setLoading(true); setError('')
+    try {
+      await api.apps.customInstall({
+        image: parsed.image, tag: parsed.tag || 'latest',
+        name: parsed.name || template.name,
+        icon_url: template.icon_url || '',
+        network: parsed.network || 'bridge',
+        restart: parsed.restart || 'unless-stopped',
+        webui_port: '', webui_path: '/',
+        ports:   parsed.ports.map(p => ({ host: p.host, container: p.container, protocol: 'tcp' })),
+        volumes: parsed.volumes.map(v => ({ host: v.host, container: v.container, mode: 'rw' })),
+        env:     parsed.env.map(ev => ({ key: ev.key, value: ev.value })),
+      })
+      onDone()
+    } catch (err) { setError(err.message) }
+    finally { setLoading(false) }
+  }
+
   return (
-    <Modal title={`Instalar ${template.name}`} onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4">
-        {envDefs.length > 0 ? (
-          <>
-            <p className="text-xs text-[#64748b]">Variáveis de ambiente</p>
-            {envDefs.map(e => {
-              if (!e.includes('=')) return null
-              const [k] = e.split('=', 1)
-              return (
-                <div key={k}>
-                  <label className="text-xs text-[#94a3b8] mb-1 block font-mono">{k}</label>
-                  <input value={fields[k] ?? ''} onChange={ev => setFields(f => ({ ...f, [k]: ev.target.value }))}
-                    className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#6366f1]" />
-                </div>
-              )
-            })}
-          </>
-        ) : (
-          <p className="text-xs text-[#64748b]">Este app não requer configuração.</p>
-        )}
-        {error && <p className="text-xs text-red-400">{error}</p>}
-        <button type="submit" disabled={loading}
-          className="w-full py-2.5 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#4f46e5] disabled:opacity-40">
-          {loading ? 'Instalando...' : 'Instalar'}
-        </button>
-      </form>
+    <Modal title={`Instalar ${template.name}`} onClose={onClose} wide>
+      {/* Mode tabs */}
+      <div className="flex gap-1 bg-[#0f1117] border border-[#2a2d3e] rounded-xl p-1 mb-4 w-fit">
+        {[{ id: 'form', label: 'Configurar' }, { id: 'compose', label: 'Editar docker-compose' }].map(t => (
+          <button key={t.id} onClick={() => { setMode(t.id); if (t.id === 'compose') setComposeYaml(templateToComposeYaml(template)) }}
+            className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${mode === t.id ? 'bg-[#6366f1] text-white' : 'text-[#94a3b8] hover:text-white'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {mode === 'form' ? (
+        <form onSubmit={submitForm} className="space-y-4">
+          {envDefs.length > 0 ? (
+            <>
+              <p className="text-xs text-[#64748b]">Variáveis de ambiente</p>
+              {envDefs.map(e => {
+                if (!e.includes('=')) return null
+                const [k] = e.split('=', 1)
+                return (
+                  <div key={k}>
+                    <label className="text-xs text-[#94a3b8] mb-1 block font-mono">{k}</label>
+                    <input value={fields[k] ?? ''} onChange={ev => setFields(f => ({ ...f, [k]: ev.target.value }))}
+                      className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#6366f1]" />
+                  </div>
+                )
+              })}
+            </>
+          ) : (
+            <p className="text-xs text-[#64748b]">Este app não requer configuração. Clique em "Editar docker-compose" para personalizar.</p>
+          )}
+          {error && <p className="text-xs text-red-400">{error}</p>}
+          <button type="submit" disabled={loading}
+            className="w-full py-2.5 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#4f46e5] disabled:opacity-40">
+            {loading ? 'Instalando...' : 'Instalar'}
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={submitCompose} className="space-y-4">
+          <p className="text-xs text-[#64748b]">Edite o docker-compose abaixo antes de instalar. As alterações serão aplicadas.</p>
+          <textarea value={composeYaml} onChange={e => setComposeYaml(e.target.value)}
+            rows={18}
+            className="w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-xs font-mono rounded-lg px-3 py-3 resize-none focus:outline-none focus:border-[#6366f1] leading-relaxed"
+          />
+          {error && <p className="text-xs text-red-400">{error}</p>}
+          <button type="submit" disabled={loading}
+            className="w-full py-2.5 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#4f46e5] disabled:opacity-40">
+            {loading ? 'Instalando...' : 'Instalar com este compose'}
+          </button>
+        </form>
+      )}
     </Modal>
   )
 }
@@ -483,10 +553,113 @@ function ManualInstallModal({ onClose, onDone }) {
   )
 }
 
+// ─── Store Manager Modal ──────────────────────────────────────────────────────
+function StoreManagerModal({ onClose, onRefresh }) {
+  const [stores, setStores]     = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [addOpen, setAddOpen]   = useState(false)
+  const [newStore, setNewStore] = useState({ id: '', name: '', url: '' })
+  const [refreshing, setRefreshing] = useState({})
+
+  async function loadStores() {
+    setLoading(true)
+    try { setStores(await api.stores.list()) }
+    catch (e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { loadStores() }, [])
+
+  async function toggle(store) {
+    await api.stores.toggle(store.id, !store.enabled)
+    loadStores()
+  }
+
+  async function remove(id) {
+    if (!confirm(`Remover loja "${id}"?`)) return
+    await api.stores.remove(id)
+    loadStores()
+  }
+
+  async function refreshOne(id) {
+    setRefreshing(r => ({ ...r, [id]: true }))
+    try { await api.stores.refresh(id); bust('store_templates'); onRefresh() }
+    catch (e) { alert(e.message) }
+    finally { setRefreshing(r => ({ ...r, [id]: false })) }
+  }
+
+  async function addStore(e) {
+    e.preventDefault()
+    const id = newStore.id || newStore.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+    try {
+      await api.stores.add({ ...newStore, id })
+      setNewStore({ id: '', name: '', url: '' })
+      setAddOpen(false)
+      loadStores()
+    } catch (err) { alert(err.message) }
+  }
+
+  const inp = "w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-[#6366f1]"
+
+  return (
+    <Modal title="Gerenciar Lojas" onClose={onClose} wide>
+      <div className="space-y-3">
+        {loading ? (
+          <div className="py-8 text-center text-[#64748b] text-sm">Carregando...</div>
+        ) : stores.map(store => (
+          <div key={store.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${store.enabled ? 'bg-[#0f1117] border-[#2a2d3e]' : 'bg-[#0f1117]/50 border-[#2a2d3e]/50 opacity-60'}`}>
+            <Store size={16} className="text-indigo-400 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white">{store.name}</p>
+              <p className="text-[10px] text-[#64748b] truncate">{store.url}</p>
+            </div>
+            <button onClick={() => refreshOne(store.id)} disabled={refreshing[store.id]}
+              title="Atualizar" className="p-1.5 text-[#64748b] hover:text-white disabled:opacity-40">
+              <RefreshCw size={13} className={refreshing[store.id] ? 'animate-spin' : ''} />
+            </button>
+            <button onClick={() => toggle(store)} title={store.enabled ? 'Desativar' : 'Ativar'}>
+              {store.enabled
+                ? <ToggleRight size={20} className="text-indigo-400" />
+                : <ToggleLeft size={20} className="text-[#64748b]" />}
+            </button>
+            <button onClick={() => remove(store.id)} className="p-1.5 text-[#64748b] hover:text-red-400">
+              <X size={13} />
+            </button>
+          </div>
+        ))}
+
+        {/* Add store form */}
+        {addOpen ? (
+          <form onSubmit={addStore} className="border border-indigo-500/30 rounded-xl p-3 space-y-2 bg-indigo-500/5">
+            <p className="text-xs font-medium text-indigo-300">Nova loja (ZIP)</p>
+            <input value={newStore.name} onChange={e => setNewStore(s => ({ ...s, name: e.target.value }))}
+              placeholder="Nome da loja" className={inp} />
+            <input value={newStore.url} onChange={e => setNewStore(s => ({ ...s, url: e.target.value }))}
+              placeholder="URL do arquivo .zip" className={inp} />
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setAddOpen(false)}
+                className="flex-1 py-1.5 bg-[#2a2d3e] text-[#94a3b8] rounded-lg text-xs hover:text-white">Cancelar</button>
+              <button type="submit" disabled={!newStore.name || !newStore.url}
+                className="flex-1 py-1.5 bg-indigo-600 text-white rounded-lg text-xs hover:bg-indigo-500 disabled:opacity-40">Adicionar</button>
+            </div>
+          </form>
+        ) : (
+          <button onClick={() => setAddOpen(true)}
+            className="w-full py-2 border border-dashed border-[#2a2d3e] rounded-xl text-xs text-[#64748b] hover:text-white hover:border-white/20 transition-colors flex items-center justify-center gap-2">
+            <Plus size={13} />Adicionar loja
+          </button>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
 // ─── App Card ─────────────────────────────────────────────────────────────────
 function AppCard({ template, installed, onInstall, onUninstall, onStart, onStop, onUpdate, onConfigure, busy }) {
   const isInstalled = !!installed
   const status = installed?.status
+  const storeName = template.store_name || template.source || template.category || 'local'
+
   return (
     <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-2xl p-5 flex flex-col gap-4 hover:border-[#3a3d4e] transition-colors">
       <div className="flex items-start justify-between gap-3">
@@ -495,14 +668,14 @@ function AppCard({ template, installed, onInstall, onUninstall, onStart, onStop,
           <div className="min-w-0">
             <h3 className="font-semibold text-white text-sm leading-tight">{template.name}</h3>
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full mt-1 inline-block ${categoryColors[template.category] || 'bg-[#2a2d3e] text-[#94a3b8]'}`}>
-              {template.source === 'tmcstore' ? 'TMC Store' : template.category || 'local'}
+              {storeName}
             </span>
           </div>
         </div>
         {isInstalled && (
           <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 ${
             status === 'running' ? 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]' :
-            status === 'exited' ? 'bg-red-400' : 'bg-yellow-400'
+            status === 'exited'  ? 'bg-red-400' : 'bg-yellow-400'
           }`} />
         )}
       </div>
@@ -542,25 +715,24 @@ function AppCard({ template, installed, onInstall, onUninstall, onStart, onStop,
 }
 
 // ─── page ─────────────────────────────────────────────────────────────────────
-const TABS = [
-  { id: 'all', label: 'Todos' },
-  { id: 'installed', label: 'Instalados' },
-  { id: 'local', label: 'Local' },
-  { id: 'store', label: 'TMC Store' },
-]
-
-const CACHE_TTL = 5 * 60 * 1000 // 5 min
+const CACHE_TTL = 5 * 60 * 1000
 
 export default function AppStore() {
-  const [templates, setTemplates] = useState([])
-  const [installed, setInstalled] = useState({})
-  const [busy, setBusy] = useState({})
-  const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('')
-  const [tab, setTab] = useState('all')
-  const [installModal, setInstallModal] = useState(null)
-  const [configModal, setConfigModal] = useState(null)
+  const [templates, setTemplates]           = useState([])
+  const [installed, setInstalled]           = useState({})
+  const [stores, setStores]                 = useState([])
+  const [busy, setBusy]                     = useState({})
+  const [loading, setLoading]               = useState(true)
+  const [filter, setFilter]                 = useState('')
+  const [storeTab, setStoreTab]             = useState('all')   // 'all' | 'installed' | 'local' | store_id
+  const [installModal, setInstallModal]     = useState(null)
+  const [configModal, setConfigModal]       = useState(null)
   const [manualInstallOpen, setManualInstallOpen] = useState(false)
+  const [storeManagerOpen, setStoreManagerOpen]   = useState(false)
+
+  async function loadStores() {
+    try { setStores(await api.stores.list()) } catch (e) { console.error(e) }
+  }
 
   async function load(force = false) {
     setLoading(true)
@@ -578,7 +750,7 @@ export default function AppStore() {
     finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load(); loadStores() }, [])
 
   async function act(id, fn) {
     setBusy(b => ({ ...b, [id]: true }))
@@ -587,60 +759,81 @@ export default function AppStore() {
     finally { setBusy(b => ({ ...b, [id]: false })) }
   }
 
-  async function handleRefreshStore() {
+  async function handleRefreshAll() {
     setLoading(true)
     bust('store_templates', 'store_installed')
-    try { await api.apps.refreshStore(); await load(true) }
+    try { await api.stores.refreshAll(); await load(true) }
     catch (e) { console.error(e); setLoading(false) }
   }
+
+  // Build tabs: fixed tabs + one per store
+  const fixedTabs = [
+    { id: 'all',       label: 'Todos' },
+    { id: 'installed', label: 'Instalados' },
+    { id: 'local',     label: 'Local' },
+  ]
+  const storeTabs = stores.filter(s => s.enabled).map(s => ({ id: s.id, label: s.name }))
+  const allTabs = [...fixedTabs, ...storeTabs]
 
   const filtered = templates.filter(t => {
     const q = filter.toLowerCase()
     const match = t.name.toLowerCase().includes(q) || (t.description || '').toLowerCase().includes(q)
-    if (tab === 'installed') return match && installed[t.id]
-    if (tab === 'local') return match && t.source !== 'tmcstore'
-    if (tab === 'store') return match && t.source === 'tmcstore'
-    return match
+    if (storeTab === 'installed') return match && installed[t.id]
+    if (storeTab === 'local')     return match && !t.source
+    if (storeTab === 'all')       return match
+    // store tab: filter by source or category matching store id
+    return match && (t.source === storeTab || t.category === storeTab)
   })
 
   return (
     <div className="p-6 space-y-5">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-white">App Store</h1>
           <p className="text-sm text-[#94a3b8] mt-0.5">
-            {Object.keys(installed).length} instalados · {templates.length} disponíveis
+            {Object.keys(installed).length} instalados · {templates.length} disponíveis · {stores.filter(s => s.enabled).length} lojas
           </p>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => setStoreManagerOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-[#2a2d3e] text-[#94a3b8] rounded-lg hover:text-white text-xs transition-colors">
+            <Store size={13} />Lojas
+          </button>
           <button onClick={() => setManualInstallOpen(true)}
             className="flex items-center gap-2 px-3 py-2 bg-[#6366f1] text-white rounded-lg hover:bg-[#4f46e5] text-xs transition-colors">
             <PlusCircle size={13} />Instalar Manualmente
           </button>
-          <button onClick={handleRefreshStore}
+          <button onClick={handleRefreshAll}
             className="flex items-center gap-2 px-3 py-2 bg-[#2a2d3e] text-[#94a3b8] rounded-lg hover:text-white text-xs transition-colors">
-            <RefreshCw size={13} />Atualizar Store
+            <RefreshCw size={13} />Atualizar
           </button>
         </div>
       </div>
 
+      {/* Search */}
       <div className="relative">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748b]" />
         <input type="text" placeholder="Buscar apps..." value={filter} onChange={e => setFilter(e.target.value)}
           className="w-full bg-[#1a1d27] border border-[#2a2d3e] rounded-lg pl-9 pr-4 py-2.5 text-sm text-white placeholder-[#64748b] focus:outline-none focus:border-[#6366f1]" />
       </div>
 
-      <div className="flex gap-1 bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-1 w-fit">
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${tab === t.id ? 'bg-[#6366f1] text-white' : 'text-[#94a3b8] hover:text-white'}`}>
+      {/* Store tabs — scrollable */}
+      <div className="flex gap-1 bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-1 overflow-x-auto">
+        {allTabs.map(t => (
+          <button key={t.id} onClick={() => setStoreTab(t.id)}
+            className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition-colors flex-shrink-0 ${storeTab === t.id ? 'bg-[#6366f1] text-white' : 'text-[#94a3b8] hover:text-white'}`}>
             {t.label}
           </button>
         ))}
       </div>
 
+      {/* Grid */}
       {loading ? (
-        <div className="text-center text-[#64748b] py-16">Carregando...</div>
+        <div className="flex flex-col items-center gap-3 py-16 text-[#64748b]">
+          <RefreshCw size={24} className="animate-spin opacity-40" />
+          <p className="text-sm">Carregando lojas...</p>
+        </div>
       ) : (
         <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map(t => (
@@ -674,6 +867,10 @@ export default function AppStore() {
       {manualInstallOpen && (
         <ManualInstallModal onClose={() => setManualInstallOpen(false)}
           onDone={() => { setManualInstallOpen(false); bust('store_installed'); load() }} />
+      )}
+      {storeManagerOpen && (
+        <StoreManagerModal onClose={() => { setStoreManagerOpen(false); loadStores() }}
+          onRefresh={() => load(true)} />
       )}
     </div>
   )

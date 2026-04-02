@@ -109,7 +109,7 @@ function Window({ id, label, onClose }) {
     <div
       ref={winRef}
       className={[
-        'fixed z-40 flex flex-col',
+        'fixed z-40 flex flex-col overflow-hidden',
         'bg-[#0f1117]/90 backdrop-blur-2xl',
         'border border-white/10 rounded-2xl shadow-2xl',
         'transition-[opacity,transform] duration-200',

@@ -19,7 +19,7 @@ class SPAStaticFiles(StaticFiles):
             return FileResponse(Path(self.directory) / "index.html")
 
 
-from api.routes import containers, apps, metrics, logs, system, groups, storage, files, terminal, users
+from api.routes import containers, apps, metrics, logs, system, groups, storage, files, terminal, users, stores
 from api.auth import verify_key, auth_enabled, setup_required, save_key
 
 
@@ -65,7 +65,8 @@ app.include_router(groups.router, prefix="/api/groups", tags=["groups"])
 app.include_router(storage.router, prefix="/api/storage", tags=["storage"])
 app.include_router(files.router, prefix="/api/files", tags=["files"])
 app.include_router(terminal.router, prefix="/api/terminal", tags=["terminal"])
-app.include_router(users.router, prefix="/api/users", tags=["users"])
+app.include_router(users.router,  prefix="/api/users",  tags=["users"])
+app.include_router(stores.router, prefix="/api/stores", tags=["stores"])
 
 
 @app.get("/api/health", dependencies=[])

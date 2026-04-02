@@ -1,7 +1,6 @@
 """
-Remote store service — fetches apps from CasaOS-compatible GitHub stores.
-Parses app.json + docker-compose.yml from each app directory.
-Fetches all apps concurrently for fast load times.
+Store service — unified multi-store fetcher.
+Coordinates the TMC GitHub store and any zip-based stores from the registry.
 """
 import json
 import re
@@ -10,11 +9,15 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
-STORE_URL = "https://api.github.com/repos/mariosemes/CasaOS-TMCstore/contents/Apps"
-RAW_BASE = "https://raw.githubusercontent.com/mariosemes/CasaOS-TMCstore/main/Apps"
+from services import store_registry, zip_store_service
 
-_cache: dict = {"apps": [], "fetched_at": 0}
-CACHE_TTL = 3600  # 1 hour
+# ─── TMC GitHub store (original) ─────────────────────────────────────────────
+
+TMC_API_URL = "https://api.github.com/repos/mariosemes/CasaOS-TMCstore/contents/Apps"
+TMC_RAW_BASE = "https://raw.githubusercontent.com/mariosemes/CasaOS-TMCstore/main/Apps"
+
+_tmc_cache: dict = {"apps": [], "fetched_at": 0}
+CACHE_TTL = 3600
 
 
 def _fetch_json(url: str) -> Optional[dict | list]:
@@ -37,61 +40,46 @@ def _fetch_text(url: str) -> Optional[str]:
         return None
 
 
-def _parse_compose_port(compose_text: str) -> Optional[str]:
-    m = re.search(r'WEBUI_PORT[^:]*:\s*(\d+)', compose_text)
-    if m:
-        return m.group(1)
-    m = re.search(r'"(\d+):\d+/tcp"', compose_text)
-    if m:
-        return m.group(1)
-    m = re.search(r'-\s*["\']?(\d+):\d+["\']?', compose_text)
-    if m:
-        return m.group(1)
+def _parse_compose_port(text: str) -> Optional[str]:
+    m = re.search(r'WEBUI_PORT[^:]*:\s*(\d+)', text)
+    if m: return m.group(1)
+    m = re.search(r'"(\d+):\d+/tcp"', text)
+    if m: return m.group(1)
+    m = re.search(r'-\s*["\']?(\d+):\d+["\']?', text)
+    if m: return m.group(1)
     return None
 
 
-def _parse_compose_image(compose_text: str) -> Optional[str]:
-    m = re.search(r'image:\s*([^\s\n]+)', compose_text)
+def _parse_compose_image(text: str) -> Optional[str]:
+    m = re.search(r'image:\s*([^\s\n]+)', text)
     return m.group(1).strip() if m else None
 
 
-def _parse_compose_env(compose_text: str) -> list:
-    envs = re.findall(r'-\s*([\w]+=[^\n]+)', compose_text)
-    return [e.strip() for e in envs if '=' in e]
+def _parse_compose_env(text: str) -> list:
+    return [e.strip() for e in re.findall(r'-\s*([\w]+=[^\n]+)', text) if "=" in e]
 
 
-def _fetch_one_app(app_id: str) -> Optional[dict]:
-    """Fetch and parse a single app from the store. Returns None on failure."""
-    app_json_url = f"{RAW_BASE}/{app_id}/app.json"
-    compose_url  = f"{RAW_BASE}/{app_id}/docker-compose.yml"
-
-    meta         = _fetch_json(app_json_url)
-    compose_text = _fetch_text(compose_url)
-
+def _fetch_tmc_app(app_id: str) -> Optional[dict]:
+    meta = _fetch_json(f"{TMC_RAW_BASE}/{app_id}/app.json")
+    compose_text = _fetch_text(f"{TMC_RAW_BASE}/{app_id}/docker-compose.yml")
     if not meta:
         return None
-
     image = meta.get("image", "")
     tag   = meta.get("tag", "latest")
     if image and not image.endswith(f":{tag}"):
         image = f"{image}:{tag}"
-
     if compose_text and not image:
         image = _parse_compose_image(compose_text) or ""
-
-    port = _parse_compose_port(compose_text) if compose_text else None
-
-    icon_url = (
-        f"https://cdn.jsdelivr.net/gh/mariosemes/CasaOS-TMCstore@main/Apps/{app_id}/icon.png"
-    )
-
+    port     = _parse_compose_port(compose_text) if compose_text else None
+    icon_url = f"https://cdn.jsdelivr.net/gh/mariosemes/CasaOS-TMCstore@main/Apps/{app_id}/icon.png"
     return {
         "id":          f"store-{app_id}",
         "name":        meta.get("app", app_id),
         "description": meta.get("description", ""),
         "version":     tag,
         "category":    "store",
-        "source":      "tmcstore",
+        "source":      "tmc",
+        "store_name":  "TMC Store",
         "icon_url":    icon_url,
         "app_url":     meta.get("app_url", ""),
         "docker": {
@@ -104,30 +92,96 @@ def _fetch_one_app(app_id: str) -> Optional[dict]:
     }
 
 
-def fetch_store_apps(force: bool = False) -> list:
-    global _cache
+def _fetch_tmc_store(force: bool = False) -> list:
+    global _tmc_cache
     now = time.time()
-    if not force and _cache["apps"] and (now - _cache["fetched_at"]) < CACHE_TTL:
-        return _cache["apps"]
+    if not force and _tmc_cache["apps"] and (now - _tmc_cache["fetched_at"]) < CACHE_TTL:
+        return _tmc_cache["apps"]
 
-    print("[StoreService] Fetching store apps from GitHub...")
-    entries = _fetch_json(STORE_URL)
+    print("[StoreService] Fetching TMC store from GitHub...")
+    entries = _fetch_json(TMC_API_URL)
     if not entries:
-        return _cache["apps"]
+        return _tmc_cache["apps"]
 
     app_ids = [e["name"] for e in entries if e.get("type") == "dir"]
-
     apps = []
-    with ThreadPoolExecutor(max_workers=12) as executor:
-        future_map = {executor.submit(_fetch_one_app, app_id): app_id for app_id in app_ids}
-        for future in as_completed(future_map):
-            result = future.result()
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        futures = {ex.submit(_fetch_tmc_app, aid): aid for aid in app_ids}
+        for f in as_completed(futures):
+            result = f.result()
             if result:
                 apps.append(result)
-                print(f"[StoreService] Loaded: {result['name']}")
 
-    # stable sort by name
     apps.sort(key=lambda a: a["name"].lower())
-    _cache = {"apps": apps, "fetched_at": now}
-    print(f"[StoreService] Loaded {len(apps)} store apps")
+    _tmc_cache = {"apps": apps, "fetched_at": now}
+    print(f"[StoreService] TMC: loaded {len(apps)} apps")
     return apps
+
+
+# ─── Unified fetch ────────────────────────────────────────────────────────────
+
+def _fetch_one_store(store: dict, force: bool) -> list:
+    sid   = store["id"]
+    sname = store["name"]
+    stype = store.get("type", "zip")
+    url   = store.get("url", "")
+
+    if stype == "github_tmc":
+        return _fetch_tmc_store(force)
+
+    if stype == "zip":
+        return zip_store_service.fetch_zip_store(sid, sname, url, force)
+
+    return []
+
+
+def fetch_store_apps(force: bool = False) -> list:
+    """Fetch apps from all enabled stores concurrently."""
+    stores = store_registry.get_enabled_stores()
+    all_apps = []
+
+    with ThreadPoolExecutor(max_workers=len(stores) or 1) as ex:
+        futures = {ex.submit(_fetch_one_store, s, force): s["id"] for s in stores}
+        for f in as_completed(futures):
+            try:
+                all_apps.extend(f.result())
+            except Exception as e:
+                print(f"[StoreService] Error fetching store: {e}")
+
+    # Deduplicate by id (keep first occurrence)
+    seen = set()
+    deduped = []
+    for app in all_apps:
+        if app["id"] not in seen:
+            seen.add(app["id"])
+            deduped.append(app)
+
+    return deduped
+
+
+def _reset_tmc_cache():
+    global _tmc_cache
+    _tmc_cache = {"apps": [], "fetched_at": 0}
+
+
+def refresh_store(store_id: Optional[str] = None) -> int:
+    """Force-refresh one or all stores."""
+    if store_id:
+        zip_store_service.bust(store_id)
+        if store_id == "tmc":
+            _reset_tmc_cache()
+        stores = [s for s in store_registry.get_enabled_stores() if s["id"] == store_id]
+    else:
+        zip_store_service.bust_all()
+        _reset_tmc_cache()
+        stores = store_registry.get_enabled_stores()
+
+    apps = []
+    with ThreadPoolExecutor(max_workers=len(stores) or 1) as ex:
+        futures = {ex.submit(_fetch_one_store, s, True): s["id"] for s in stores}
+        for f in as_completed(futures):
+            try:
+                apps.extend(f.result())
+            except Exception:
+                pass
+    return len(apps)
