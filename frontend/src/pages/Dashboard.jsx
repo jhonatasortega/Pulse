@@ -312,7 +312,7 @@ export default function Dashboard() {
   const stoppedGroups = groups.filter(g => g.status === 'stopped')
 
   return (
-    <div className="h-full overflow-y-auto relative" style={wallpaper}>
+    <div className="h-full overflow-y-auto relative">
       {/* overlay for readability when wallpaper is set */}
       {hasWallpaper && <div className="absolute inset-0 bg-black/40 pointer-events-none" />}
 

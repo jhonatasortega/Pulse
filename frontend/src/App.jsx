@@ -223,10 +223,26 @@ function DockItem({ label, isActive, onClick, children }) {
   )
 }
 
+// ─── Wallpaper helpers (applied at root level to cover full viewport) ──────────
+function getWallpaperStyle() {
+  const url    = localStorage.getItem('pulse_wallpaper_url') || ''
+  const preset = localStorage.getItem('pulse_wallpaper_preset') || ''
+  if (url)     return { backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }
+  if (preset)  return { background: preset }
+  return {}
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const location  = useLocation()
   const navigate  = useNavigate()
+  const [wallpaper, setWallpaper] = useState(getWallpaperStyle)
+
+  useEffect(() => {
+    function onWallpaperChange() { setWallpaper(getWallpaperStyle()) }
+    window.addEventListener('wallpaper-change', onWallpaperChange)
+    return () => window.removeEventListener('wallpaper-change', onWallpaperChange)
+  }, [])
 
   const active    = pageFor(location.pathname)
 
@@ -264,7 +280,7 @@ export default function App() {
   }, [])
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-[#0f1117]">
+    <div className="relative w-screen h-screen overflow-hidden bg-[#0f1117]" style={wallpaper}>
       {/* Dashboard always fills background */}
       <div className="absolute inset-0 pb-24 overflow-y-auto">
         <Dashboard />
