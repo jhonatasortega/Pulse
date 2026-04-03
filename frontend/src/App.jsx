@@ -150,7 +150,7 @@ function Window({ id, label, onClose }) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-hidden min-h-0">
         <PageContent id={id} />
       </div>
     </div>

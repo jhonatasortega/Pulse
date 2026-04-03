@@ -384,7 +384,7 @@ function FileBrowser({ initialPath, onBack, clipboard, setClipboard }) {
       {loading ? (
         <div className="flex-1 flex items-center justify-center text-[#64748b]">Carregando...</div>
       ) : viewMode === 'list' ? (
-        <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl overflow-hidden flex-1">
+        <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl overflow-auto flex-1 min-h-0">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#2a2d3e]">
@@ -449,7 +449,7 @@ function FileBrowser({ initialPath, onBack, clipboard, setClipboard }) {
         </div>
       ) : (
         /* Grid view */
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto min-h-0">
           {entries.length === 0 ? (
             <p className="text-center text-[#64748b] py-12">Pasta vazia</p>
           ) : (
