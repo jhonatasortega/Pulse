@@ -27,12 +27,16 @@ const iconMap = {
   retrocloud: '🕹️', novelreader: '📖', gopeed: '⚡', retroarch: '🎮',
   emulatorjs: '🕹️', redis: '🗃️', postgres: '🗄️', mysql: '🗄️',
   'home-assistant': '🏠', homeassistant: '🏠', grafana: '📊',
+  tailscale: '🔒', pihole: '🚫', vaultwarden: '🔑', bitwarden: '🔑',
+  gitea: '🐙', wireguard: '🛡️', nginx: '🌐', caddy: '🌐',
+  syncthing: '🔄', immich: '📷', audiobookshelf: '🎧',
 }
 
 function groupIcon(name) {
   const key = Object.keys(iconMap).find(k => name.toLowerCase().includes(k))
   return iconMap[key] || '📦'
 }
+
 
 // ─── wallpaper settings panel ─────────────────────────────────────────────────
 const GRADIENT_PRESETS = [
@@ -184,17 +188,23 @@ function GroupTile({ group, onStart, onStop, onRestart, busy }) {
       {hostPort && running ? (
         <a href={`http://${location.hostname}:${hostPort}`} target="_blank" rel="noreferrer"
           onClick={e => e.stopPropagation()}
-          className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#2a2d3e] to-[#1a1d27] flex items-center justify-center text-3xl shadow-inner hover:from-[#6366f1]/20 hover:scale-105 transition-all">
-          {groupIcon(group.name)}
+          className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#2a2d3e] to-[#1a1d27] flex items-center justify-center text-3xl shadow-inner hover:from-[#6366f1]/20 hover:scale-105 transition-all overflow-hidden">
+          {group.icon_url
+            ? <img src={group.icon_url} alt={group.display_name} className="w-10 h-10 object-contain rounded-xl" onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex' }} />
+            : null}
+          <span style={{ display: group.icon_url ? 'none' : 'flex' }}>{groupIcon(group.display_name || group.name)}</span>
         </a>
       ) : (
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#2a2d3e] to-[#1a1d27] flex items-center justify-center text-3xl shadow-inner">
-          {groupIcon(group.name)}
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#2a2d3e] to-[#1a1d27] flex items-center justify-center text-3xl shadow-inner overflow-hidden">
+          {group.icon_url
+            ? <img src={group.icon_url} alt={group.display_name} className="w-10 h-10 object-contain rounded-xl" onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex' }} />
+            : null}
+          <span style={{ display: group.icon_url ? 'none' : 'flex' }}>{groupIcon(group.display_name || group.name)}</span>
         </div>
       )}
 
       <div className="text-center">
-        <p className="text-xs font-semibold text-white leading-tight truncate max-w-[90px]">{group.name}</p>
+        <p className="text-xs font-semibold text-white leading-tight truncate max-w-[90px]">{group.display_name || group.name}</p>
         <p className={`text-[10px] mt-0.5 ${running ? 'text-green-400' : partial ? 'text-yellow-400' : 'text-[#64748b]'}`}>
           {running ? 'rodando' : partial
             ? `${group.containers.filter(c => c.status === 'running').length}/${group.containers.length}`

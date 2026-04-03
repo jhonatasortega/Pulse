@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import yaml
 from pathlib import Path
@@ -67,6 +68,13 @@ def delete_app_state(app_id: str):
         path.unlink()
 
 
+def _container_name(template: dict) -> str:
+    """Derive a clean container name from the app's display name."""
+    display = template.get("name") or template.get("id", "app")
+    slug = re.sub(r'[^a-z0-9]+', '-', display.lower()).strip('-')
+    return f"pulse_{slug}"
+
+
 def _build_run_config(template: dict, overrides: dict = None) -> dict:
     overrides = overrides or {}
     docker_cfg = template.get("docker", {})
@@ -95,14 +103,21 @@ def _build_run_config(template: dict, overrides: dict = None) -> dict:
             k, v = e.split("=", 1)
             environment[k] = overrides.get(k, v)
 
+    icon_url = template.get("icon_url", "")
+
     return {
         "image": docker_cfg.get("image"),
-        "name": f"pulse_{app_id}",
+        "name": _container_name(template),
         "ports": ports,
         "volumes": volumes,
         "environment": environment,
         "restart": docker_cfg.get("restart", "unless-stopped"),
-        "labels": {"pulse.managed": "true", "pulse.app": app_id},
+        "labels": {
+            "pulse.managed": "true",
+            "pulse.app": app_id,
+            "pulse.icon": icon_url,
+            "pulse.display_name": template.get("name", ""),
+        },
     }
 
 
@@ -156,7 +171,7 @@ def update_app(app_id: str) -> dict:
 
     # Stop and remove current container
     try:
-        docker_service.remove_container(f"pulse_{app_id}", force=True)
+        docker_service.remove_container(state.get("container_name", f"pulse_{app_id}"), force=True)
     except Exception as e:
         print(f"[AppService] Remove before update warning: {e}")
 
@@ -181,7 +196,7 @@ def reconfigure_app(app_id: str, new_env: dict) -> dict:
 
     # Stop and remove current container
     try:
-        docker_service.remove_container(f"pulse_{app_id}", force=True)
+        docker_service.remove_container(state.get("container_name", f"pulse_{app_id}"), force=True)
     except Exception as e:
         print(f"[AppService] Remove before reconfig warning: {e}")
 
@@ -203,7 +218,7 @@ def uninstall_app(app_id: str, remove_data: bool = False) -> dict:
         raise ValueError(f"App '{app_id}' is not installed")
 
     try:
-        docker_service.remove_container(f"pulse_{app_id}", force=True)
+        docker_service.remove_container(state.get("container_name", f"pulse_{app_id}"), force=True)
     except Exception as e:
         print(f"[AppService] Container removal warning: {e}")
 

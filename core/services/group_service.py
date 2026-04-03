@@ -38,9 +38,18 @@ def _group_containers(containers: list) -> list:
             g["status"] = "stopped"
 
         ports: dict = {}
+        icon_url = ""
+        display_name = ""
         for c in g["containers"]:
             ports.update(c.get("ports", {}))
+            labels = c.get("labels", {})
+            if not icon_url:
+                icon_url = labels.get("pulse.icon", "")
+            if not display_name:
+                display_name = labels.get("pulse.display_name", "")
         g["ports"] = ports
+        g["icon_url"] = icon_url
+        g["display_name"] = display_name or g["name"]
 
         result.append(g)
 
