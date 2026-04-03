@@ -11,7 +11,6 @@
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com)
 [![License](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey?style=flat-square)](https://creativecommons.org/licenses/by-nc/4.0/)
-[![License](https://img.shields.io/badge/License-MIT-6366f1?style=flat-square)](LICENSE)
 
 A beautiful, lightweight alternative to Portainer and CasaOS — with a macOS-inspired windowed interface, wallpaper support, integrated terminal, multi-store App Store and multi-user access control.
 
@@ -48,8 +47,6 @@ A beautiful, lightweight alternative to Portainer and CasaOS — with a macOS-in
 ![Storage](docs/screenshots/storage.png)
 
 </td>
-</tr>
-<tr>
 <td width="50%">
 
 **File Browser**
@@ -57,20 +54,13 @@ A beautiful, lightweight alternative to Portainer and CasaOS — with a macOS-in
 ![Files](docs/screenshots/files.png)
 
 </td>
+</tr>
+<tr>
 <td width="50%">
 
 **Terminal**
 
 ![Terminal](docs/screenshots/terminal.png)
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-**Sistema**
-
-![System](docs/screenshots/system.png)
 
 </td>
 <td width="50%">
@@ -90,16 +80,19 @@ A beautiful, lightweight alternative to Portainer and CasaOS — with a macOS-in
 ### Interface
 - **Windowed UI** — pages open as draggable, resizable floating windows (macOS-style)
 - **Bottom dock** — glassmorphism icon dock, centered, hover tooltips
-- **Custom wallpapers** — photo presets, gradient themes, custom URL or upload from PC
-- **Display name** — personalized greeting (`Bom dia, João!`)
+- **Custom wallpapers** — photo presets, gradient themes, custom URL or upload from PC; persisted server-side per user
+- **Display name** — personalized greeting (`Bom dia, João!`); saved to server, works in incognito
+- **Server-side preferences** — wallpaper and display name stored per user, loaded on login across any device or browser session
 
 ### Containers
 - **Dashboard** — live tiles with official icons, status indicators, one-click start/stop/restart
+- **Fixed storage tile** — always-visible quick access to disk overview from the dashboard
 - **Container side drawer** — click any container to open a panel with:
   - **Logs** — last 200 lines + live stream toggle
   - **Config** — edit env vars, restart policy, volumes and ports
   - **Terminal** — `docker exec` shell directly inside the container
-  - **Local Domain** — generate `/etc/hosts` entry for `.local` access
+  - **Local Domain** — generate `.local` domain entry and apply it directly to the Pi's `/etc/hosts`
+- **DNS wizard** — step-by-step guide to install and configure `dnsmasq` on the Pi so `.local` names resolve on all network devices automatically
 - **Grouped view** — Docker Compose stacks shown as expandable groups
 - **Navigate from dashboard** — click the arrow on a tile to go straight to that group
 
@@ -119,10 +112,17 @@ A beautiful, lightweight alternative to Portainer and CasaOS — with a macOS-in
 | Big Bear Store | Curated self-hosted apps |
 | Pentest Tools | Security & network tools |
 
+### Storage & Files
+- **Disk overview modal** — click the storage tile on the dashboard to see disk usage at a glance
+- **Full file browser** — browse, upload, download, rename, delete, copy, move files
+- **Cross-disk copy/move** — clipboard persists when switching between disks
+- **Host filesystem access** — browse the Pi's root filesystem (`/host`) and external drives (`/mnt/*`)
+- **Docker volumes** — browse volume data directly
+- **Inline errors** — no browser `alert()` popups; errors shown inline
+
 ### System
 - **Real-time metrics** — CPU, RAM, temperature, disk (WebSocket live)
 - **System info** — Docker version, host arch, image list, network list
-- **Storage** — disk usage, Docker volumes, full file browser (upload/download/rename/delete)
 - **Terminal** — integrated PTY bash shell inside the Pulse container
 - **Docker exec** — shell terminal inside any running container
 
@@ -171,15 +171,19 @@ Open `http://<your-server-ip>:3000` — on first access you'll create your admin
 services:
   pulse-backend:
     build: .
+    image: pulse-backend:1.0.0
     container_name: pulse_backend
+    pid: host                    # required for DNS wizard (nsenter)
     ports:
       - "3000:3000"
     volumes:
       - ./data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
+      - /:/host:rshared          # Pi root filesystem (file browser + DNS)
       - /mnt:/mnt:rshared
       - /media:/media:rshared
       - /home:/home:rshared
+      - /var/lib/docker/volumes:/var/lib/docker/volumes:rshared
     environment:
       - PULSE_API_KEY=${PULSE_API_KEY:-}
     restart: unless-stopped
@@ -215,12 +219,12 @@ Pulse/
 │   ├── main.py               # Entry point, auth endpoints, lifespan
 │   ├── api/
 │   │   ├── auth.py           # Auth dependency (HTTP + WebSocket)
-│   │   └── routes/           # containers, groups, apps, terminal, users, stores…
-│   └── services/             # docker_service, app_service, store_service, user_service…
+│   │   └── routes/           # containers, groups, apps, terminal, users, stores, dns, files…
+│   └── services/             # docker_service, app_service, store_service, user_service, file_service…
 ├── frontend/
 │   └── src/
 │       ├── App.jsx            # Windowed UI + bottom dock
-│       ├── pages/             # Dashboard, Containers, AppStore, Terminal, Users…
+│       ├── pages/             # Dashboard, Containers, AppStore, Storage, Terminal, Users…
 │       └── components/        # AuthGate (login / first-access setup)
 ├── apps/templates/            # Built-in app templates (YAML)
 ├── docs/screenshots/          # UI screenshots
@@ -237,7 +241,10 @@ Pulse/
 - **Docker client** — singleton with auto-reconnect for fast repeated API calls
 - **Store pre-warm** — store cache is populated in background at startup so App Store loads instantly
 - **Container naming** — apps installed from stores use `pulse_{name_slug}` (e.g. `pulse_tailscale`)
-- **Modal containment** — modals use `position: absolute` inside floating windows (not `fixed`) to stay clipped within the window bounds
+- **Server-side preferences** — wallpaper and display name stored per user in `users.json`, loaded after login so they work in incognito and across devices
+- **Host filesystem** — Pi's `/` is mounted at `/host` inside the container, enabling full file browsing and DNS management without SSH
+- **DNS propagation** — dnsmasq reads `/etc/hosts` and serves entries to the whole LAN; managed entirely from the Pulse UI via `nsenter`
+- **File download auth** — download URLs include credentials as query params (same pattern as WebSocket) since browsers don't send custom headers on `<a href>` navigations
 
 ---
 
