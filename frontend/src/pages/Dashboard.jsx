@@ -51,19 +51,19 @@ const GRADIENT_PRESETS = [
 const IMAGE_PRESETS = [
   {
     label: 'Nebulosa',
-    url: 'https://images.unsplash.com/photo-1462332420958-a05d1e002413?w=1920&q=80',
+    url: 'https://images6.alphacoders.com/109/thumb-1920-1096452.jpg',
   },
   {
     label: 'Floresta',
-    url: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=1920&q=80',
+    url: 'https://th.bing.com/th/id/R.c4948d8a07e11b9c9b01a274a515adb1?rik=PmbX6HqLAhE83A&pid=ImgRaw&r=0',
   },
   {
-    label: 'Montanhas',
-    url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80',
+    label: 'Pôr do sol',
+    url: 'https://www.xtrafondos.com/wallpapers/pinos-y-montanas-al-atardecer-5146.jpg',
   },
   {
-    label: 'Oceano',
-    url: 'https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=1920&q=80',
+    label: 'Paisagem',
+    url: 'https://images8.alphacoders.com/984/thumb-1920-984617.jpg',
   },
 ]
 
