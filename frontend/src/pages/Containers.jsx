@@ -433,40 +433,6 @@ function LocalDomainTab({ container }) {
         </div>
       )}
 
-      <div>
-        <p className="text-xs text-[#64748b] mb-1">Entrada no <code className="text-indigo-400">/etc/hosts</code></p>
-        <div className="flex gap-2 items-center">
-          <code className="flex-1 text-xs text-green-400 bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 font-mono">
-            {hostsEntry}
-          </code>
-          <button onClick={copy}
-            className={`p-2 rounded-lg transition-colors ${copied ? 'bg-green-500/20 text-green-400' : 'bg-[#2a2d3e] text-[#94a3b8] hover:text-white'}`}>
-            {copied ? <Check size={15} /> : <Copy size={15} />}
-          </button>
-        </div>
-      </div>
-
-      {/* Seu dispositivo */}
-      <div className="border border-[#2a2d3e] rounded-xl p-4 space-y-3">
-        <div>
-          <p className="text-sm font-medium text-white">Seu PC / dispositivo</p>
-          <p className="text-xs text-[#64748b] mt-0.5">
-            Para acessar <code className="text-indigo-400">{hostname}</code> no navegador, adicione a linha abaixo ao <code className="text-indigo-400">hosts</code> do seu dispositivo e reinicie o navegador.
-          </p>
-        </div>
-        <div className="bg-[#0f1117] rounded-lg px-3 py-2 space-y-1">
-          <p className="text-[10px] text-[#475569]">Windows: <code className="text-[#64748b]">C:\Windows\System32\drivers\etc\hosts</code> (como administrador)</p>
-          <p className="text-[10px] text-[#475569]">Linux/Mac: <code className="text-[#64748b]">sudo nano /etc/hosts</code></p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={copy}
-            className={`flex-1 py-2 text-sm rounded-lg border transition-colors flex items-center justify-center gap-2 ${copied ? 'border-green-500/30 text-green-400 bg-green-500/10' : 'border-[#2a2d3e] text-[#94a3b8] hover:text-white hover:border-white/20'}`}>
-            {copied ? <Check size={13} /> : <Copy size={13} />}
-            {copied ? 'Copiado!' : 'Copiar linha'}
-          </button>
-        </div>
-      </div>
-
       {/* Aplicar no Pi (container-to-container) */}
       <div className="border border-[#2a2d3e] rounded-xl p-4 space-y-3">
         <div>
