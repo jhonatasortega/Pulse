@@ -22,9 +22,13 @@ def get_disks() -> list:
         seen_devices.add(part.device)
         try:
             usage = psutil.disk_usage(part.mountpoint)
+            # The host root filesystem appears as /mnt inside the container
+            # (because docker-compose mounts /mnt from host, and mmcblk0p2 IS the host root).
+            # We mount / at /host so the user can browse the full SD card.
+            browse_path = "/host" if part.mountpoint == "/" else part.mountpoint
             disks.append({
                 "device": part.device,
-                "mountpoint": part.mountpoint,
+                "mountpoint": browse_path,
                 "fstype": part.fstype,
                 "total": usage.total,
                 "used": usage.used,

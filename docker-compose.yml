@@ -10,6 +10,7 @@ services:
       - ./data:/app/data
       - ./apps/templates:/app/apps/templates
       - /var/run/docker.sock:/var/run/docker.sock
+      - /:/host:rshared
       - /mnt:/mnt:rshared
       - /media:/media:rshared
       - /home:/home:rshared

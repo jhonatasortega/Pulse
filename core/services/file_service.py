@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 
 ALLOWED_BASES = [
+    "/host",
     "/mnt",
     "/media",
     "/app/data",
