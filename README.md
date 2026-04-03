@@ -26,25 +26,25 @@ A beautiful, lightweight alternative to Portainer and CasaOS — with a macOS-in
 <tr>
 <td width="50%">
 
-**Containers**
+**App Store**
 
-![Containers](docs/screenshots/containers.png)
+![App Store](docs/screenshots/appstore.png)
 
 </td>
 <td width="50%">
 
-**App Store**
+**Storage**
 
-![App Store](docs/screenshots/appstore.png)
+![Storage](docs/screenshots/storage.png)
 
 </td>
 </tr>
 <tr>
 <td width="50%">
 
-**Storage & File Browser**
+**File Browser**
 
-![Storage](docs/screenshots/storage.png)
+![Files](docs/screenshots/files.png)
 
 </td>
 <td width="50%">
