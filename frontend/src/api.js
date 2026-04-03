@@ -146,6 +146,8 @@ export const api = {
       request('/files/copy', { method: 'POST', body: JSON.stringify({ src, dest_dir }) }),
     move: (src, dest_dir) =>
       request('/files/move', { method: 'POST', body: JSON.stringify({ src, dest_dir }) }),
+    applyHostsEntry: (hostname, ip) =>
+      request('/files/hosts-entry', { method: 'POST', body: JSON.stringify({ hostname, ip }) }),
     downloadUrl: (path) => {
       const params = new URLSearchParams({ path })
       const key  = auth.getKey()

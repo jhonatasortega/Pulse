@@ -27,6 +27,11 @@ class TransferRequest(BaseModel):
     dest_dir: str
 
 
+class HostsEntryRequest(BaseModel):
+    hostname: str  # e.g. "plex.local"
+    ip: str        # e.g. "192.168.0.233"
+
+
 @router.get("/roots")
 def list_roots():
     return file_service.list_roots()
@@ -132,6 +137,25 @@ def move_path(req: TransferRequest):
         raise HTTPException(403, str(e))
     except (FileNotFoundError, ValueError) as e:
         raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@router.post("/hosts-entry")
+def apply_hosts_entry(req: HostsEntryRequest):
+    """Write or update an entry in the Pi's /etc/hosts via the /host mount."""
+    hosts_path = "/host/etc/hosts"
+    try:
+        with open(hosts_path, "r") as f:
+            lines = f.readlines()
+        # Remove any existing line with this hostname
+        lines = [l for l in lines if req.hostname not in l.split()]
+        lines.append(f"{req.ip}  {req.hostname}\n")
+        with open(hosts_path, "w") as f:
+            f.writelines(lines)
+        return {"ok": True}
+    except PermissionError:
+        raise HTTPException(403, "Sem permissão para editar /etc/hosts")
     except Exception as e:
         raise HTTPException(500, str(e))
 

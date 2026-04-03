@@ -258,10 +258,14 @@ function LocalDomainTab({ container }) {
     container.name.replace(/^pulse_/, '').replace(/[^a-z0-9]/g, '-').toLowerCase()
   )
   const [copied, setCopied] = useState(false)
+  const [applying, setApplying] = useState(false)
+  const [applyStatus, setApplyStatus] = useState(null) // 'ok' | 'error'
+  const [applyMsg, setApplyMsg] = useState('')
   const host = location.hostname
 
-  const firstPort = Object.values(container.ports || {})?.[0]?.[0] || ''
-  const hostsEntry = `${host}  ${subdomain}.local`
+  const ports = Object.values(container.ports || {}).flat().filter(Boolean)
+  const hostname = `${subdomain}.local`
+  const hostsEntry = `${host}  ${hostname}`
 
   function copy() {
     navigator.clipboard.writeText(hostsEntry)
@@ -269,32 +273,47 @@ function LocalDomainTab({ container }) {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  async function applyOnPi() {
+    setApplying(true)
+    setApplyStatus(null)
+    try {
+      await api.files.applyHostsEntry(hostname, host)
+      setApplyStatus('ok')
+      setApplyMsg(`${hostsEntry} adicionado ao /etc/hosts do Pi`)
+    } catch (e) {
+      setApplyStatus('error')
+      setApplyMsg(e.message)
+    } finally {
+      setApplying(false)
+    }
+  }
+
   return (
     <div className="p-5 space-y-5">
-      <div className="bg-[#0f1117] border border-[#2a2d3e] rounded-xl p-4 space-y-1">
-        <p className="text-xs text-[#64748b]">Para acessar este container via nome no navegador, adicione ao <code className="text-indigo-400">/etc/hosts</code> do seu dispositivo:</p>
-      </div>
-
       <div>
-        <label className="text-xs text-[#64748b] block mb-1">Nome local (sem espaços)</label>
-        <div className="flex gap-2">
+        <label className="text-xs text-[#64748b] block mb-1">Nome local</label>
+        <div className="flex gap-2 items-center">
           <input value={subdomain} onChange={e => setSubdomain(e.target.value.replace(/[^a-z0-9-]/g, '').toLowerCase())}
             className="flex-1 bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2 font-mono" />
-          <span className="flex items-center text-sm text-[#64748b] font-mono">.local</span>
+          <span className="text-sm text-[#64748b] font-mono">.local</span>
         </div>
       </div>
 
-      {firstPort && (
+      {ports.length > 0 && (
         <div>
-          <p className="text-xs text-[#64748b] mb-1">URL resultante</p>
-          <p className="text-sm text-indigo-400 font-mono bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2">
-            http://{subdomain}.local:{firstPort}
-          </p>
+          <p className="text-xs text-[#64748b] mb-2">URLs resultantes</p>
+          <div className="space-y-1">
+            {ports.map(p => (
+              <p key={p} className="text-sm text-indigo-400 font-mono bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2">
+                http://{hostname}:{p}
+              </p>
+            ))}
+          </div>
         </div>
       )}
 
       <div>
-        <p className="text-xs text-[#64748b] mb-1">Linha para adicionar ao <code className="text-indigo-400">/etc/hosts</code></p>
+        <p className="text-xs text-[#64748b] mb-1">Entrada no <code className="text-indigo-400">/etc/hosts</code></p>
         <div className="flex gap-2 items-center">
           <code className="flex-1 text-xs text-green-400 bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 font-mono">
             {hostsEntry}
@@ -306,10 +325,23 @@ function LocalDomainTab({ container }) {
         </div>
       </div>
 
-      <div className="text-xs text-[#475569] space-y-1 border-t border-[#2a2d3e] pt-4">
-        <p className="font-medium text-[#64748b]">Como adicionar:</p>
-        <p>• <strong className="text-[#94a3b8]">Linux/Mac:</strong> <code className="text-indigo-400">sudo nano /etc/hosts</code></p>
-        <p>• <strong className="text-[#94a3b8]">Windows:</strong> <code className="text-indigo-400">C:\Windows\System32\drivers\etc\hosts</code> (como administrador)</p>
+      {/* Apply on Pi */}
+      <div className="border border-[#2a2d3e] rounded-xl p-4 space-y-3">
+        <div>
+          <p className="text-sm font-medium text-white">Aplicar no Pi</p>
+          <p className="text-xs text-[#64748b] mt-0.5">Adiciona automaticamente ao <code className="text-indigo-400">/etc/hosts</code> do servidor</p>
+        </div>
+        <button onClick={applyOnPi} disabled={applying || !subdomain}
+          className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg disabled:opacity-40 transition-colors">
+          {applying ? 'Aplicando...' : `Aplicar ${hostname}`}
+        </button>
+        {applyStatus === 'ok' && (
+          <p className="text-xs text-green-400">{applyMsg}</p>
+        )}
+        {applyStatus === 'error' && (
+          <p className="text-xs text-red-400">{applyMsg}</p>
+        )}
+        <p className="text-xs text-[#475569]">Para acessar pelo nome no seu PC, adicione também ao <code className="text-[#64748b]">/etc/hosts</code> do seu dispositivo.</p>
       </div>
     </div>
   )
