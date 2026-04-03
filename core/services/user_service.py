@@ -103,3 +103,17 @@ def verify_password(username: str, password: str) -> Optional[dict]:
 
 def any_users_exist() -> bool:
     return bool(_load_users())
+
+
+def get_preferences(username: str) -> dict:
+    user = _load_users().get(username, {})
+    return user.get("preferences", {})
+
+
+def save_preferences(username: str, prefs: dict) -> dict:
+    users = _load_users()
+    if username not in users:
+        raise ValueError(f"User '{username}' not found")
+    users[username]["preferences"] = prefs
+    _save_users(users)
+    return prefs

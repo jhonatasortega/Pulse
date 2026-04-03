@@ -79,6 +79,15 @@ function WallpaperPanel({ onClose }) {
     if (nickName.trim()) localStorage.setItem('pulse_display_name', nickName.trim())
     else localStorage.removeItem('pulse_display_name')
     window.dispatchEvent(new Event('wallpaper-change'))
+    // Persist to server so preferences survive incognito/other devices
+    const user = auth.getUser()
+    if (user) {
+      api.users.savePreferences({
+        display_name: nickName.trim(),
+        wallpaper_url: url.startsWith('data:') ? '' : url,
+        wallpaper_preset: preset,
+      }).catch(() => {})
+    }
     onClose()
   }
   function clear() {

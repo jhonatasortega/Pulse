@@ -37,6 +37,7 @@ function SetupUserScreen({ onDone }) {
       const user = await api.auth.setupUser(finalUser, password, displayName.trim())
       auth.setUser(user, true)
       auth.setPass(password, true)
+      await applyServerPrefs()
       onDone()
     } catch (err) {
       setError(err.message)
@@ -194,6 +195,24 @@ function SetupKeyScreen({ onDone }) {
   )
 }
 
+// ─── Apply server preferences to localStorage ────────────────────────────────
+async function applyServerPrefs() {
+  try {
+    const prefs = await api.users.getPreferences()
+    if (prefs.wallpaper_url) {
+      localStorage.setItem('pulse_wallpaper_url', prefs.wallpaper_url)
+      localStorage.removeItem('pulse_wallpaper_preset')
+    } else if (prefs.wallpaper_preset) {
+      localStorage.setItem('pulse_wallpaper_preset', prefs.wallpaper_preset)
+      localStorage.removeItem('pulse_wallpaper_url')
+    }
+    if (prefs.display_name) {
+      localStorage.setItem('pulse_display_name', prefs.display_name)
+    }
+    window.dispatchEvent(new Event('wallpaper-change'))
+  } catch {}
+}
+
 // ─── Multi-user login screen ──────────────────────────────────────────────────
 function LoginUserScreen({ onDone }) {
   const [username, setUsername] = useState('')
@@ -210,6 +229,7 @@ function LoginUserScreen({ onDone }) {
       const user = await api.auth.login(username, password)
       auth.setUser(user, remember)
       auth.setPass(password, remember)
+      await applyServerPrefs()
       onDone()
     } catch {
       setError('Usuário ou senha incorretos')
@@ -372,7 +392,12 @@ export default function AuthGate({ children }) {
         const pass = auth.getPass()
         if (user && pass) {
           api.auth.login(user.username, pass)
-            .then(u => { auth.setUser(u, true); auth.setPass(pass, true); setVerified(true) })
+            .then(async u => {
+              auth.setUser(u, true)
+              auth.setPass(pass, true)
+              await applyServerPrefs()
+              setVerified(true)
+            })
             .catch(() => auth.clear())
         }
         return

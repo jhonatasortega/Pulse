@@ -44,6 +44,8 @@ export const api = {
     delete: (username) => request(`/users/${username}`, { method: 'DELETE' }),
     changePassword: (username, current_password, new_password) =>
       request(`/users/${username}/change-password`, { method: 'POST', body: JSON.stringify({ current_password, new_password }) }),
+    getPreferences: () => request('/users/me/preferences'),
+    savePreferences: (prefs) => request('/users/me/preferences', { method: 'PUT', body: JSON.stringify(prefs) }),
   },
 
   // Containers

@@ -48,6 +48,34 @@ def delete_user(username: str, _=Depends(require_admin)):
         raise HTTPException(400, str(e))
 
 
+class PreferencesRequest(BaseModel):
+    display_name: str = ""
+    wallpaper_url: str = ""
+    wallpaper_preset: str = ""
+
+
+@router.get("/me/preferences")
+def get_my_preferences(request: Request, _=Depends(verify_key)):
+    username = request.headers.get("x-pulse-user") or request.query_params.get("user", "")
+    if not username:
+        return {}
+    try:
+        return user_service.get_preferences(username)
+    except Exception:
+        return {}
+
+
+@router.put("/me/preferences")
+def save_my_preferences(req: PreferencesRequest, request: Request, _=Depends(verify_key)):
+    username = request.headers.get("x-pulse-user") or request.query_params.get("user", "")
+    if not username:
+        return {}
+    try:
+        return user_service.save_preferences(username, req.dict())
+    except Exception:
+        return {}
+
+
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
