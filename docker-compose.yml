@@ -14,6 +14,7 @@ services:
       - /mnt:/mnt:rshared
       - /media:/media:rshared
       - /home:/home:rshared
+      - /var/lib/docker/volumes:/var/lib/docker/volumes:rshared
     environment:
       - PYTHONUNBUFFERED=1
       - PULSE_DATA_DIR=/app/data
