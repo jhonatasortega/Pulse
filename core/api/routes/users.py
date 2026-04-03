@@ -1,7 +1,6 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import Optional
-from starlette.requests import HTTPConnection
 from services import user_service
 from api.auth import require_admin, verify_key
 
@@ -55,9 +54,9 @@ class ChangePasswordRequest(BaseModel):
 
 
 @router.post("/{username}/change-password")
-def change_password(username: str, req: ChangePasswordRequest, conn: HTTPConnection = Depends(verify_key)):
+def change_password(username: str, req: ChangePasswordRequest, request: Request, _=Depends(verify_key)):
     """Any authenticated user can change their own password."""
-    caller = conn.headers.get("x-pulse-user") or conn.query_params.get("user", "")
+    caller = request.headers.get("x-pulse-user") or request.query_params.get("user", "")
     if caller != username:
         raise HTTPException(403, "You can only change your own password")
     user = user_service.verify_password(username, req.current_password)
