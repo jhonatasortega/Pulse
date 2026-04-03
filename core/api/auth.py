@@ -90,6 +90,11 @@ def _resolve_user(conn: HTTPConnection) -> dict | None:
 
 def verify_key(conn: HTTPConnection):
     """Global auth dependency — works for HTTP and WebSocket."""
+    # Auth endpoints must always be publicly accessible (login, status, setup)
+    path = conn.scope.get("path", "")
+    if path.startswith("/api/auth/"):
+        return
+
     if not auth_enabled():
         return
 
