@@ -1,6 +1,8 @@
 <div align="center">
 
-# ⚡ Pulse
+<img src="frontend/public/logo.svg" alt="Pulse Logo" width="80" height="80" />
+
+# Pulse
 
 **Self-hosted Docker container manager — built for Raspberry Pi and ARM servers**
 

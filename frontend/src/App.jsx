@@ -167,7 +167,7 @@ function Dock({ active, onNavigate }) {
         isActive={active === null}
         onClick={() => onNavigate('/')}
       >
-        <span className="text-xl leading-none">⚡</span>
+        <img src="/logo.svg" alt="Pulse" className="w-7 h-7" />
       </DockItem>
 
       <div className="w-px h-8 bg-white/10 mx-1" />

@@ -221,8 +221,8 @@ function LoginUserScreen({ onDone }) {
   return (
     <div className="w-full max-w-sm mx-4">
       <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/5 border border-white/10 mb-4">
-          <span className="text-3xl">⚡</span>
+        <div className="inline-flex items-center justify-center w-16 h-16 mb-4">
+          <img src="/logo.svg" alt="Pulse" className="w-16 h-16" />
         </div>
         <h1 className="text-2xl font-bold text-white">Pulse</h1>
         <p className="text-sm text-white/40 mt-1">Entre para continuar</p>
@@ -302,8 +302,8 @@ function LoginKeyScreen({ onDone }) {
   return (
     <div className="w-full max-w-sm mx-4">
       <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/5 border border-white/10 mb-4">
-          <span className="text-3xl">⚡</span>
+        <div className="inline-flex items-center justify-center w-16 h-16 mb-4">
+          <img src="/logo.svg" alt="Pulse" className="w-16 h-16" />
         </div>
         <h1 className="text-2xl font-bold text-white">Pulse</h1>
         <p className="text-sm text-white/40 mt-1">Entre para continuar</p>
