@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { auth } from '../auth'
-import { UserPlus, Trash2, Shield, Eye, X, RefreshCw } from 'lucide-react'
+import { UserPlus, Trash2, Shield, Eye, X, RefreshCw, LogOut, KeyRound } from 'lucide-react'
 
 function Modal({ title, onClose, children }) {
   return (
@@ -67,17 +67,79 @@ function CreateUserModal({ onClose, onDone }) {
   )
 }
 
+function ChangePasswordModal({ onClose }) {
+  const [current,  setCurrent]  = useState('')
+  const [next,     setNext]     = useState('')
+  const [confirm,  setConfirm]  = useState('')
+  const [loading,  setLoading]  = useState(false)
+  const [error,    setError]    = useState('')
+  const [ok,       setOk]       = useState(false)
+  const currentUser = auth.getUser()
+  const inp = "w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-[#6366f1]"
+
+  async function submit(e) {
+    e.preventDefault()
+    if (next !== confirm) { setError('As senhas não coincidem'); return }
+    if (next.length < 8)  { setError('Mínimo 8 caracteres'); return }
+    setLoading(true); setError('')
+    try {
+      const username = currentUser?.username
+      await api.users.changePassword(username, current, next)
+      auth.setPass(next, !!localStorage.getItem('pulse_pass'))
+      setOk(true)
+    } catch (err) { setError(err.message) }
+    finally { setLoading(false) }
+  }
+
+  return (
+    <Modal title="Alterar senha" onClose={onClose}>
+      {ok ? (
+        <div className="text-center py-4 space-y-3">
+          <p className="text-green-400 text-sm">Senha alterada com sucesso!</p>
+          <button onClick={onClose} className="px-4 py-2 bg-[#6366f1] text-white rounded-lg text-sm">Fechar</button>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="text-xs text-[#64748b] block mb-1">Senha atual</label>
+            <input type="password" value={current} onChange={e => setCurrent(e.target.value)} className={inp} autoFocus />
+          </div>
+          <div>
+            <label className="text-xs text-[#64748b] block mb-1">Nova senha</label>
+            <input type="password" value={next} onChange={e => setNext(e.target.value)} placeholder="Mínimo 8 caracteres" className={inp} />
+          </div>
+          <div>
+            <label className="text-xs text-[#64748b] block mb-1">Confirmar nova senha</label>
+            <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} className={inp} />
+          </div>
+          {error && <p className="text-xs text-red-400">{error}</p>}
+          <button type="submit" disabled={!current || !next || !confirm || loading}
+            className="w-full py-2.5 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#4f46e5] disabled:opacity-40">
+            {loading ? 'Salvando...' : 'Alterar senha'}
+          </button>
+        </form>
+      )}
+    </Modal>
+  )
+}
+
 const ROLE_BADGE = {
   admin:  { label: 'Admin',  icon: Shield, cls: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' },
   viewer: { label: 'Viewer', icon: Eye,    cls: 'bg-[#2a2d3e] text-[#94a3b8] border-[#3a3d4e]' },
 }
 
 export default function Users() {
-  const [users, setUsers]       = useState([])
-  const [loading, setLoading]   = useState(true)
+  const [users, setUsers]           = useState([])
+  const [loading, setLoading]       = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
+  const [changePwOpen, setChangePwOpen] = useState(false)
   const currentUser = auth.getUser()
   const isAdmin     = auth.isAdmin()
+
+  function logout() {
+    auth.clear()
+    window.location.reload()
+  }
 
   async function load() {
     setLoading(true)
@@ -100,17 +162,35 @@ export default function Users() {
     catch (e) { alert(e.message) }
   }
 
-  if (!isAdmin) {
-    return (
-      <div className="p-6 text-center text-[#64748b] py-20">
-        <Shield size={32} className="mx-auto mb-3 opacity-30" />
-        Apenas administradores podem gerenciar usuários.
-      </div>
-    )
-  }
-
   return (
     <div className="p-6 space-y-5">
+      {/* My account */}
+      {currentUser && (
+        <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl px-5 py-4 flex items-center gap-4">
+          <div className="w-9 h-9 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-300 font-bold text-sm flex-shrink-0">
+            {currentUser.username[0].toUpperCase()}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-white">{currentUser.display_name || currentUser.username}</p>
+            <p className="text-xs text-[#64748b]">@{currentUser.username}</p>
+          </div>
+          <button onClick={() => setChangePwOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2a2d3e] text-[#94a3b8] rounded-lg hover:text-white text-xs transition-colors">
+            <KeyRound size={12} /> Alterar senha
+          </button>
+          <button onClick={logout}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 text-xs transition-colors">
+            <LogOut size={12} /> Sair
+          </button>
+        </div>
+      )}
+
+      {!isAdmin ? (
+        <div className="text-center text-[#64748b] py-20">
+          <Shield size={32} className="mx-auto mb-3 opacity-30" />
+          Apenas administradores podem gerenciar usuários.
+        </div>
+      ) : (<>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-white">Usuários</h1>
@@ -193,6 +273,9 @@ export default function Users() {
       </div>
 
       {createOpen && <CreateUserModal onClose={() => setCreateOpen(false)} onDone={load} />}
+      </>)}
+
+      {changePwOpen && <ChangePasswordModal onClose={() => setChangePwOpen(false)} />}
     </div>
   )
 }

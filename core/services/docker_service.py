@@ -2,9 +2,18 @@ import docker
 import os
 from typing import Optional
 
+_client: docker.DockerClient | None = None
+
 
 def get_client() -> docker.DockerClient:
-    return docker.DockerClient(base_url="unix:///var/run/docker.sock")
+    global _client
+    if _client is None:
+        _client = docker.DockerClient(base_url="unix:///var/run/docker.sock")
+    try:
+        _client.ping()
+    except Exception:
+        _client = docker.DockerClient(base_url="unix:///var/run/docker.sock")
+    return _client
 
 
 def serialize_container(c) -> dict:

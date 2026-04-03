@@ -1,134 +1,197 @@
+<div align="center">
+
 # ⚡ Pulse
 
-Self-hosted container management platform for Raspberry Pi and ARM64 servers. Manage all your Docker containers from a clean, modern web interface — inspired by Umbrel/CasaOS.
+**Self-hosted Docker container manager — built for Raspberry Pi and ARM servers**
 
-![Status](https://img.shields.io/badge/status-active-brightgreen) ![Platform](https://img.shields.io/badge/platform-ARM64%20%7C%20x86-blue) ![Python](https://img.shields.io/badge/python-3.12-blue) ![React](https://img.shields.io/badge/react-18-61dafb)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com)
+[![License](https://img.shields.io/badge/License-MIT-6366f1?style=flat-square)](LICENSE)
+
+A beautiful, lightweight alternative to Portainer and CasaOS — with a macOS-inspired windowed interface, wallpaper support, integrated terminal, multi-store App Store and multi-user access control.
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+</div>
+
+---
+
+## Screenshots
+
+<table>
+<tr>
+<td width="50%">
+
+**Containers**
+
+![Containers](docs/screenshots/containers.png)
+
+</td>
+<td width="50%">
+
+**App Store**
+
+![App Store](docs/screenshots/appstore.png)
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Storage & File Browser**
+
+![Storage](docs/screenshots/storage.png)
+
+</td>
+<td width="50%">
+
+**Terminal**
+
+![Terminal](docs/screenshots/terminal.png)
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Sistema**
+
+![System](docs/screenshots/system.png)
+
+</td>
+<td width="50%">
+
+**Aparência**
+
+![Appearance](docs/screenshots/appearance.png)
+
+</td>
+</tr>
+</table>
 
 ---
 
 ## Features
 
-### Dashboard
-- Live app grid grouped by Docker Compose project
-- System resource widgets — CPU, RAM, disk, temperature (real-time WebSocket)
-- Wallpaper support: 4 photo presets, custom URL, or upload from your computer
-- Glassmorphism theme when wallpaper is active
-- Personalized greeting using your display name
-
-### Navigation — Floating Dock
-- Icon-only bottom dock (fixed, centered, glassmorphism)
-- Each icon opens the corresponding page as a **floating window** — draggable, maximizable, macOS-style traffic light buttons
-- Dashboard always fills the background viewport
+### Interface
+- **Windowed UI** — pages open as draggable, resizable floating windows (macOS-style)
+- **Bottom dock** — glassmorphism icon dock, centered, hover tooltips
+- **Custom wallpapers** — photo presets, gradient themes, custom URL or upload from PC
+- **Display name** — personalized greeting (`Bom dia, João!`)
 
 ### Containers
-- Grouped accordion view by Docker Compose project
-- Per-app actions: start / stop / restart / logs / config editor
-- Config editor: edit env vars and restart policy (recreates container in-place)
-- Real-time logs with WebSocket tail
+- **Dashboard** — live tiles with official icons, status indicators, one-click start/stop/restart
+- **Container side drawer** — click any container to open a panel with:
+  - **Logs** — last 200 lines + live stream toggle
+  - **Config** — edit env vars, restart policy, volumes and ports
+  - **Terminal** — `docker exec` shell directly inside the container
+  - **Local Domain** — generate `/etc/hosts` entry for `.local` access
+- **Grouped view** — Docker Compose stacks shown as expandable groups
+- **Navigate from dashboard** — click the arrow on a tile to go straight to that group
 
 ### App Store
-- **6 built-in stores**: TMC Store, Play Store (x86 + ARM), Home Automation, Big Bear, Pentest Tools
-- All stores load concurrently — no waiting
-- Store cache pre-warmed on startup so the first open is instant
-- Store manager: enable/disable, refresh, remove, add any zip-based store URL
-- Per-store filter tabs (auto-generated, scrollable)
-- **Install with compose editor**: preview and edit the generated `docker-compose.yml` before installing
-- Manual install (CasaOS-style): image, ports, volumes, env vars, network, restart policy
-- Paste a `docker-compose.yml` directly — fields auto-filled from it
+- **519+ apps** across 6 stores (expandable)
+- **Multi-store** — enable/disable stores, add custom zip store URLs
+- **Edit before install** — full docker-compose editor before deploying
+- **Official icons** — app icons preserved from store metadata
+- **Clean container names** — `pulse_tailscale` not `pulse_cp0204-play-arm-tailscale`
 
-### Storage
-- Disk usage cards + Docker volumes table
-- Click any disk to open the built-in file manager inline
-
-### File Manager
-- List / grid view modes
-- Breadcrumb navigation
-- Right-click context menu: copy, cut, paste, rename, delete, new folder, new file
-- Built-in text editor for config files
-- File upload and download
-
-### Terminal
-- Full bash terminal inside the container, directly in the browser
-- xterm.js frontend with 256-color theme and resize support
-- WebSocket PTY backend (Linux only)
-
-### Metrics
-- Real-time CPU, RAM, disk, temperature via WebSocket
-- Historical graphs per container
+| Store | Type |
+|-------|------|
+| TMC Store | Local templates (Nginx, Traefik, Portainer…) |
+| Play Store (x86) | Community zip store |
+| Play Store (ARM) | Community zip store |
+| Home Automation | Home Assistant ecosystem |
+| Big Bear Store | Curated self-hosted apps |
+| Pentest Tools | Security & network tools |
 
 ### System
-- Docker info, images, networks
+- **Real-time metrics** — CPU, RAM, temperature, disk (WebSocket live)
+- **System info** — Docker version, host arch, image list, network list
+- **Storage** — disk usage, Docker volumes, full file browser (upload/download/rename/delete)
+- **Terminal** — integrated PTY bash shell inside the Pulse container
+- **Docker exec** — shell terminal inside any running container
 
-### Users & RBAC
-- Multi-user support with username + password
-- Roles: **admin** (full access) / **viewer** (read-only — GET only, mutations blocked)
-- First-access setup: create admin account with display name on first visit
-- User management page: create, delete, toggle role
-- All authentication works over WebSocket connections too (query-param fallback)
+### Security & Users
+- **Multi-user RBAC** — admin and viewer roles
+- **Admin** — full access: create, modify, delete containers, apps, users
+- **Viewer** — read-only: see containers, logs, metrics, files
+- **Change password** — any user can change their own password
+- **Logout** — session management from the Users page
 
-### Auth Modes
-| Mode | How it works |
-|---|---|
-| Open | No `PULSE_API_KEY` set, no users configured — full access |
-| API Key | Set `PULSE_API_KEY` env var or configure via first-access setup screen |
-| Multi-user | Create users via the setup screen or Users page; each user has a role |
+| Auth mode | How to enable |
+|-----------|--------------|
+| Multi-user | First access creates admin account |
+| API Key | Set `PULSE_API_KEY` env var |
+| No auth | Leave `PULSE_API_KEY` empty (dev only) |
 
-### Docker Startup
-- Pretty colored banner on `docker compose up`
-- Shows auth status, data directory, Docker socket check
+---
+
+## Quick Start
+
+```bash
+git clone https://github.com/jhonatasortega/Pulse.git
+cd Pulse
+docker compose up -d --build
+```
+
+Open `http://<your-server-ip>:3000` — on first access you'll create your admin account.
+
+---
+
+## Deploy to Raspberry Pi
+
+```bash
+# Usage: ./deploy.sh user@host [remote_dir]
+./deploy.sh pi@192.168.0.100
+./deploy.sh pi@192.168.0.100 /home/pi/pulse
+```
+
+---
+
+## Configuration
+
+### docker-compose.yml
+
+```yaml
+services:
+  pulse-backend:
+    build: .
+    container_name: pulse_backend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /mnt:/mnt:rshared
+      - /media:/media:rshared
+      - /home:/home:rshared
+    environment:
+      - PULSE_API_KEY=${PULSE_API_KEY:-}
+    restart: unless-stopped
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PULSE_API_KEY` | *(empty)* | Single-user API key. Leave empty to use multi-user login |
+| `PULSE_DATA_DIR` | `/app/data` | Data directory for users, app state, configs |
 
 ---
 
 ## Stack
 
-| Layer | Tech |
-|---|---|
-| Backend | FastAPI + Docker SDK for Python |
-| Frontend | React 18 + Vite + Tailwind CSS |
-| Terminal | xterm.js + Python `pty` (PTY over WebSocket) |
-| Container access | `/var/run/docker.sock` (no DinD) |
-| Metrics | psutil 6.1.1 (ARM64 pre-built wheel) |
-| App Store | Multi-store zip fetcher + CasaOS-TMCstore via GitHub API |
-| Auth | SHA-256 + salt, stored in `/app/data/users.json` |
-
----
-
-## Deploy (Raspberry Pi / ARM64)
-
-```bash
-# Clone
-git clone https://github.com/jhonatasortega/Pulse.git
-cd Pulse
-
-# Build frontend
-cd frontend && npm install && npm run build && cd ..
-
-# Optional: set API key (or configure via UI on first access)
-echo "PULSE_API_KEY=your-secret-key" > .env
-
-# Build and start
-docker compose up -d --build
-```
-
-Access at **http://\<pi-ip\>:3000**
-
-On first access with no key configured, you'll be prompted to create an admin account.
-
----
-
-## Development
-
-```bash
-# Backend
-cd core
-pip install -r requirements.txt
-uvicorn main:app --reload --port 3000
-
-# Frontend (separate terminal)
-cd frontend
-npm install
-npm run dev   # Vite dev server → proxies API to :3000
-```
+| Layer | Technology |
+|-------|-----------|
+| Backend | Python 3.12, FastAPI, Uvicorn |
+| Frontend | React 18, Vite, Tailwind CSS |
+| Terminal | xterm.js + PTY (`subprocess` + `pty.openpty`) |
+| Docker API | docker-py (singleton client) |
+| Auth | SHA-256 + salt, session/localStorage |
+| Serving | FastAPI StaticFiles (SPA fallback) |
 
 ---
 
@@ -136,128 +199,36 @@ npm run dev   # Vite dev server → proxies API to :3000
 
 ```
 Pulse/
-├── core/                          # FastAPI backend
-│   ├── main.py                    # App entrypoint, SPA routing, auth endpoints
+├── core/                     # FastAPI backend
+│   ├── main.py               # Entry point, auth endpoints, lifespan
 │   ├── api/
-│   │   ├── auth.py                # Multi-mode auth (open / API key / multi-user)
-│   │   └── routes/
-│   │       ├── containers.py      # Container CRUD + config editor
-│   │       ├── groups.py          # Compose project grouping
-│   │       ├── apps.py            # App Store + custom/manual install
-│   │       ├── stores.py          # Store registry CRUD
-│   │       ├── storage.py         # Disks + Docker volumes
-│   │       ├── files.py           # File manager (browse/edit/upload/download)
-│   │       ├── metrics.py         # System metrics + WebSocket
-│   │       ├── logs.py            # Container logs + WebSocket
-│   │       ├── system.py          # Docker info / images / networks
-│   │       ├── terminal.py        # PTY terminal over WebSocket
-│   │       └── users.py           # User management (RBAC)
-│   └── services/
-│       ├── docker_service.py      # Docker SDK wrapper
-│       ├── group_service.py       # Container grouping by compose project
-│       ├── app_service.py         # Template install / uninstall
-│       ├── store_service.py       # Unified multi-store fetcher
-│       ├── store_registry.py      # Store list persistence (/app/data/stores.json)
-│       ├── zip_store_service.py   # Zip-based store downloader + parser
-│       ├── storage_service.py     # psutil disk info + Docker volumes
-│       ├── file_service.py        # Secure file operations
-│       ├── metrics_service.py     # CPU / RAM / disk / temperatures
-│       └── user_service.py        # Multi-user auth + RBAC
-├── frontend/                      # React + Vite + Tailwind
+│   │   ├── auth.py           # Auth dependency (HTTP + WebSocket)
+│   │   └── routes/           # containers, groups, apps, terminal, users, stores…
+│   └── services/             # docker_service, app_service, store_service, user_service…
+├── frontend/
 │   └── src/
-│       ├── App.jsx                # Dock + floating window system
-│       ├── auth.js                # Auth helpers (API key + multi-user)
-│       ├── api.js                 # Typed API client + WebSocket helpers
-│       ├── cache.js               # In-memory TTL cache
-│       ├── components/
-│       │   └── AuthGate.jsx       # Login / first-access setup screen
-│       └── pages/
-│           ├── Dashboard.jsx      # App grid, metrics widgets, wallpaper
-│           ├── Containers.jsx     # Container list + logs + config editor
-│           ├── AppStore.jsx       # Multi-store browser + install modals
-│           ├── Storage.jsx        # Disks, volumes, inline file manager
-│           ├── Metrics.jsx        # Real-time graphs
-│           ├── System.jsx         # Docker info / images / networks
-│           ├── Terminal.jsx       # xterm.js PTY terminal
-│           └── Users.jsx          # User management page
-├── apps/templates/                # Local YAML app templates
-│   ├── nginx-proxy-manager.yml    # Reverse proxy + Let's Encrypt
-│   ├── traefik.yml                # Traefik v3 load balancer
-│   ├── portainer.yml
-│   ├── filebrowser.yml
-│   └── uptime-kuma.yml
-├── docker/
-│   └── entrypoint.sh              # Colored startup banner + health checks
-├── Dockerfile                     # Python 3.12-slim, pre-built frontend
-└── docker-compose.yml             # Single service, mounts /mnt /media /home
+│       ├── App.jsx            # Windowed UI + bottom dock
+│       ├── pages/             # Dashboard, Containers, AppStore, Terminal, Users…
+│       └── components/        # AuthGate (login / first-access setup)
+├── apps/templates/            # Built-in app templates (YAML)
+├── docs/screenshots/          # UI screenshots
+├── docker/entrypoint.sh       # Colored ASCII startup banner
+├── Dockerfile
+└── docker-compose.yml
 ```
 
 ---
 
-## App Stores
+## Architecture Notes
 
-Pulse fetches apps from multiple stores simultaneously. All stores are enabled by default and can be managed from the UI (App Store → Lojas).
-
-| Store | Type | Notes |
-|---|---|---|
-| TMC Store | GitHub API | 24+ apps, icons from jsDelivr CDN |
-| Play Store (x86) | ZIP | General-purpose apps |
-| Play Store (ARM) | ZIP | ARM-optimized images |
-| Home Automation | ZIP | Home Assistant, Zigbee, etc. |
-| Big Bear Store | ZIP | Large curated collection |
-| Pentest Tools | ZIP | Security/pentest containers |
-
-You can also add any custom zip store URL from the store manager.
+- **WebSocket auth** — browsers can't send custom headers on WS upgrades; credentials are appended as query params and read via `starlette.requests.HTTPConnection`
+- **Docker client** — singleton with auto-reconnect for fast repeated API calls
+- **Store pre-warm** — store cache is populated in background at startup so App Store loads instantly
+- **Container naming** — apps installed from stores use `pulse_{name_slug}` (e.g. `pulse_tailscale`)
+- **Modal containment** — modals use `position: absolute` inside floating windows (not `fixed`) to stay clipped within the window bounds
 
 ---
 
-## Add a Local Template
-
-Create `apps/templates/myapp.yml`:
-
-```yaml
-id: myapp
-name: My App
-description: Short description
-version: "1.0"
-category: tools
-icon: 🛠️
-webui_port: 8080
-webui_path: /
-
-docker:
-  image: myimage:latest
-  ports:
-    - "8080:80"
-  volumes:
-    - ./data/myapp:/data
-  env:
-    - MY_VAR=default_value
-```
-
----
-
-## Environment Variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `PULSE_API_KEY` | _(empty)_ | API key for single-user auth. Empty = use UI setup or open access |
-| `PULSE_DATA_DIR` | `/app/data` | Data directory inside container |
-
----
-
-## Container Grouping
-
-Containers are grouped by the `com.docker.compose.project` label (set automatically by Docker Compose). Standalone containers appear as individual tiles.
-
-| Status | Meaning |
-|---|---|
-| 🟢 running | All containers up |
-| 🟡 partial | Some containers up |
-| ⚫ stopped | All containers down |
-
----
-
-## License
-
-MIT
+<div align="center">
+Made with ⚡ for self-hosters who want something beautiful
+</div>

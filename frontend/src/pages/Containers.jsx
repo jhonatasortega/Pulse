@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { api, logsSocket, containerTerminalSocket } from '../api'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import {
   Play, Square, RotateCw, Trash2, FileText, RefreshCw, X,
-  ChevronDown, ChevronRight, Settings, Layers, TerminalSquare,
+  ChevronDown, ChevronRight, Settings, Layers, TerminalSquare, Globe, Copy, Check,
 } from 'lucide-react'
 
 // ─── Status badges ─────────────────────────────────────────────────────────────
@@ -251,6 +252,69 @@ function TerminalTab({ container }) {
   )
 }
 
+// ─── Local domain tab ──────────────────────────────────────────────────────────
+function LocalDomainTab({ container }) {
+  const [subdomain, setSubdomain] = useState(
+    container.name.replace(/^pulse_/, '').replace(/[^a-z0-9]/g, '-').toLowerCase()
+  )
+  const [copied, setCopied] = useState(false)
+  const host = location.hostname
+
+  const firstPort = Object.values(container.ports || {})?.[0]?.[0] || ''
+  const hostsEntry = `${host}  ${subdomain}.local`
+
+  function copy() {
+    navigator.clipboard.writeText(hostsEntry)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="p-5 space-y-5">
+      <div className="bg-[#0f1117] border border-[#2a2d3e] rounded-xl p-4 space-y-1">
+        <p className="text-xs text-[#64748b]">Para acessar este container via nome no navegador, adicione ao <code className="text-indigo-400">/etc/hosts</code> do seu dispositivo:</p>
+      </div>
+
+      <div>
+        <label className="text-xs text-[#64748b] block mb-1">Nome local (sem espaços)</label>
+        <div className="flex gap-2">
+          <input value={subdomain} onChange={e => setSubdomain(e.target.value.replace(/[^a-z0-9-]/g, '').toLowerCase())}
+            className="flex-1 bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2 font-mono" />
+          <span className="flex items-center text-sm text-[#64748b] font-mono">.local</span>
+        </div>
+      </div>
+
+      {firstPort && (
+        <div>
+          <p className="text-xs text-[#64748b] mb-1">URL resultante</p>
+          <p className="text-sm text-indigo-400 font-mono bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2">
+            http://{subdomain}.local:{firstPort}
+          </p>
+        </div>
+      )}
+
+      <div>
+        <p className="text-xs text-[#64748b] mb-1">Linha para adicionar ao <code className="text-indigo-400">/etc/hosts</code></p>
+        <div className="flex gap-2 items-center">
+          <code className="flex-1 text-xs text-green-400 bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 font-mono">
+            {hostsEntry}
+          </code>
+          <button onClick={copy}
+            className={`p-2 rounded-lg transition-colors ${copied ? 'bg-green-500/20 text-green-400' : 'bg-[#2a2d3e] text-[#94a3b8] hover:text-white'}`}>
+            {copied ? <Check size={15} /> : <Copy size={15} />}
+          </button>
+        </div>
+      </div>
+
+      <div className="text-xs text-[#475569] space-y-1 border-t border-[#2a2d3e] pt-4">
+        <p className="font-medium text-[#64748b]">Como adicionar:</p>
+        <p>• <strong className="text-[#94a3b8]">Linux/Mac:</strong> <code className="text-indigo-400">sudo nano /etc/hosts</code></p>
+        <p>• <strong className="text-[#94a3b8]">Windows:</strong> <code className="text-indigo-400">C:\Windows\System32\drivers\etc\hosts</code> (como administrador)</p>
+      </div>
+    </div>
+  )
+}
+
 // ─── Container drawer ──────────────────────────────────────────────────────────
 function ContainerDrawer({ container, onClose, onSaved }) {
   const [tab, setTab] = useState('logs')
@@ -258,6 +322,7 @@ function ContainerDrawer({ container, onClose, onSaved }) {
     { id: 'logs',     label: 'Logs',     icon: FileText },
     { id: 'config',   label: 'Config',   icon: Settings },
     ...(container.status === 'running' ? [{ id: 'terminal', label: 'Terminal', icon: TerminalSquare }] : []),
+    { id: 'domain',   label: 'Domínio',  icon: Globe },
   ]
 
   return (
@@ -295,6 +360,7 @@ function ContainerDrawer({ container, onClose, onSaved }) {
           {tab === 'logs'     && <LogsTab container={container} />}
           {tab === 'config'   && <ConfigTab container={container} onSaved={onSaved} />}
           {tab === 'terminal' && <TerminalTab container={container} />}
+          {tab === 'domain'   && <LocalDomainTab container={container} />}
         </div>
       </div>
     </div>
@@ -302,8 +368,8 @@ function ContainerDrawer({ container, onClose, onSaved }) {
 }
 
 // ─── Group row ─────────────────────────────────────────────────────────────────
-function GroupRow({ group, onOpenDrawer, onContainerAction, busy }) {
-  const [expanded, setExpanded] = useState(false)
+function GroupRow({ group, onOpenDrawer, onContainerAction, busy, autoExpand }) {
+  const [expanded, setExpanded] = useState(autoExpand)
   const [groupBusy, setGroupBusy] = useState(false)
 
   async function doGroupAction(fn) {
@@ -421,6 +487,8 @@ function GroupRow({ group, onOpenDrawer, onContainerAction, busy }) {
 
 // ─── Main ──────────────────────────────────────────────────────────────────────
 export default function Containers() {
+  const location = useLocation()
+  const focusGroup = location.state?.group || null
   const [groups, setGroups]     = useState([])
   const [loading, setLoading]   = useState(true)
   const [drawer, setDrawer]     = useState(null)   // container object
@@ -478,6 +546,7 @@ export default function Containers() {
                 <GroupRow key={g.id} group={g} busy={busy}
                   onOpenDrawer={setDrawer}
                   onContainerAction={containerAction}
+                  autoExpand={focusGroup === g.id}
                 />
               ))}
               {groups.length === 0 && (

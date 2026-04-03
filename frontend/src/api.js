@@ -42,6 +42,8 @@ export const api = {
     create: (username, password, role) => request('/users/', { method: 'POST', body: JSON.stringify({ username, password, role }) }),
     update: (username, data) => request(`/users/${username}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (username) => request(`/users/${username}`, { method: 'DELETE' }),
+    changePassword: (username, current_password, new_password) =>
+      request(`/users/${username}/change-password`, { method: 'POST', body: JSON.stringify({ current_password, new_password }) }),
   },
 
   // Containers

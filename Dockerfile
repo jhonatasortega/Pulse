@@ -2,6 +2,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    docker.io \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install Python deps (psutil has pre-built wheels for arm64, no gcc needed)
 COPY core/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt

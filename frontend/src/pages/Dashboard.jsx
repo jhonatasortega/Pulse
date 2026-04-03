@@ -51,30 +51,33 @@ const GRADIENT_PRESETS = [
 const IMAGE_PRESETS = [
   {
     label: 'Nebulosa',
-    url: 'https://images6.alphacoders.com/109/thumb-1920-1096452.jpg',
+    url: 'https://images.unsplash.com/photo-1462332420958-a05d1e002413?w=1920&q=80',
   },
   {
     label: 'Floresta',
-    url: 'https://th.bing.com/th/id/R.c4948d8a07e11b9c9b01a274a515adb1?rik=PmbX6HqLAhE83A&pid=ImgRaw&r=0',
+    url: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=1920&q=80',
   },
   {
-    label: 'Pôr do sol',
-    url: 'https://www.xtrafondos.com/wallpapers/pinos-y-montanas-al-atardecer-5146.jpg',
+    label: 'Montanhas',
+    url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80',
   },
   {
-    label: 'Paisagem',
-    url: 'https://images8.alphacoders.com/984/thumb-1920-984617.jpg',
+    label: 'Oceano',
+    url: 'https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=1920&q=80',
   },
 ]
 
 function WallpaperPanel({ onClose }) {
-  const [url, setUrl]       = useState(localStorage.getItem('pulse_wallpaper_url') || '')
-  const [preset, setPreset] = useState(localStorage.getItem('pulse_wallpaper_preset') || '')
-  const fileRef             = useRef(null)
+  const [url, setUrl]           = useState(localStorage.getItem('pulse_wallpaper_url') || '')
+  const [preset, setPreset]     = useState(localStorage.getItem('pulse_wallpaper_preset') || '')
+  const [nickName, setNickName] = useState(localStorage.getItem('pulse_display_name') || '')
+  const fileRef                 = useRef(null)
 
   function apply() {
     localStorage.setItem('pulse_wallpaper_url', url)
     localStorage.setItem('pulse_wallpaper_preset', preset)
+    if (nickName.trim()) localStorage.setItem('pulse_display_name', nickName.trim())
+    else localStorage.removeItem('pulse_display_name')
     window.dispatchEvent(new Event('wallpaper-change'))
     onClose()
   }
@@ -154,6 +157,14 @@ function WallpaperPanel({ onClose }) {
         </button>
       </div>
 
+      {/* Display name */}
+      <div>
+        <p className="text-xs text-[#64748b] mb-1">Seu nome (saudação)</p>
+        <input value={nickName} onChange={e => setNickName(e.target.value)}
+          placeholder="Ex: João"
+          className="w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-xs rounded-lg px-3 py-2" />
+      </div>
+
       <div className="flex gap-2">
         <button onClick={clear} className="flex-1 py-2 bg-[#2a2d3e] text-[#94a3b8] rounded-lg text-xs hover:text-white">Limpar</button>
         <button onClick={apply} className="flex-1 py-2 bg-[#6366f1] text-white rounded-lg text-xs hover:bg-[#4f46e5]">Aplicar</button>
@@ -231,7 +242,7 @@ function GroupTile({ group, onStart, onStop, onRestart, busy }) {
           className="p-1 rounded-lg bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 disabled:opacity-40">
           <RotateCw size={11} />
         </button>
-        <button onClick={e => { e.stopPropagation(); navigate('/containers') }}
+        <button onClick={e => { e.stopPropagation(); navigate('/containers', { state: { group: group.id } }) }}
           className="p-1 rounded-lg bg-[#6366f1]/20 text-indigo-400 hover:bg-[#6366f1]/30" title="Ver containers">
           <ExternalLink size={11} />
         </button>
@@ -244,9 +255,15 @@ function GroupTile({ group, onStart, onStop, onRestart, busy }) {
 function getWallpaper() {
   const url = localStorage.getItem('pulse_wallpaper_url') || ''
   const preset = localStorage.getItem('pulse_wallpaper_preset') || ''
-  if (url) return { backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+  if (url) return { backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }
   if (preset) return { background: preset }
   return {}
+}
+
+function getDisplayName() {
+  const local = localStorage.getItem('pulse_display_name')
+  if (local) return local
+  return auth.getUser()?.display_name || ''
 }
 
 export default function Dashboard() {
@@ -295,7 +312,7 @@ export default function Dashboard() {
   const stoppedGroups = groups.filter(g => g.status === 'stopped')
 
   return (
-    <div className="min-h-full relative" style={wallpaper}>
+    <div className="h-full overflow-y-auto relative" style={wallpaper}>
       {/* overlay for readability when wallpaper is set */}
       {hasWallpaper && <div className="absolute inset-0 bg-black/40 pointer-events-none" />}
 
@@ -303,7 +320,7 @@ export default function Dashboard() {
         {/* Header row */}
         <div className="flex items-start justify-between pt-4">
           <p className="text-3xl font-bold text-white drop-shadow">
-            {greeting()}{auth.getUser()?.display_name ? `, ${auth.getUser().display_name}` : ''}.
+            {greeting()}{getDisplayName() ? `, ${getDisplayName()}` : ''}.
           </p>
           <div className="relative" ref={settingsRef}>
             <button onClick={() => setSettingsOpen(o => !o)}
