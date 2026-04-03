@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import {
   RefreshCw, HardDrive, Database, Folder, File, ChevronRight,
@@ -476,9 +477,10 @@ function FileBrowser({ initialPath, onBack }) {
 
 // ─── main Storage page ─────────────────────────────────────────────────────────
 export default function Storage() {
+  const location = useLocation()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [browsePath, setBrowsePath] = useState(null) // null = overview
+  const [browsePath, setBrowsePath] = useState(location.state?.browsePath || null)
 
   async function load() {
     setLoading(true)

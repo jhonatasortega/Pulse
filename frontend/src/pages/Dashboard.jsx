@@ -42,6 +42,7 @@ function groupIcon(name) {
 function StorageModal({ onClose }) {
   const [disks, setDisks] = useState([])
   const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
 
   useEffect(() => {
     api.storage.info()
@@ -49,6 +50,11 @@ function StorageModal({ onClose }) {
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
+
+  function openDisk(mountpoint) {
+    onClose()
+    navigate('/storage', { state: { browsePath: mountpoint } })
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
@@ -67,10 +73,14 @@ function StorageModal({ onClose }) {
           ) : disks.length === 0 ? (
             <p className="text-center text-[#64748b] py-8">Nenhum disco encontrado</p>
           ) : disks.map((disk, i) => (
-            <div key={i} className="bg-[#0f1117] border border-[#2a2d3e] rounded-xl p-4">
+            <div key={i} onClick={() => openDisk(disk.mountpoint)}
+              className="bg-[#0f1117] border border-[#2a2d3e] rounded-xl p-4 cursor-pointer hover:border-indigo-400/40 hover:bg-indigo-500/5 transition-all group">
               <div className="flex items-center justify-between mb-1">
                 <div>
-                  <p className="text-sm font-semibold text-white">{disk.mountpoint}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-white">{disk.mountpoint}</p>
+                    <span className="text-[10px] text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity">Explorar →</span>
+                  </div>
                   <p className="text-xs text-[#64748b]">{disk.device} · {disk.fstype}</p>
                 </div>
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
