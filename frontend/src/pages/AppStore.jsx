@@ -786,7 +786,7 @@ export default function AppStore() {
   })
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="h-full overflow-y-auto p-6 space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { metricsSocket } from '../api'
+import { useEffect, useState, useRef } from 'react'
+import { metricsSocket, api } from '../api'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
 const MAX_POINTS = 30
@@ -36,6 +36,87 @@ function Gauge({ label, value, unit = '%', warn = 70, crit = 90 }) {
   )
 }
 
+function MiniBar({ value, color = '#6366f1' }) {
+  return (
+    <div className="flex items-center gap-2 flex-1">
+      <div className="flex-1 h-1.5 bg-[#2a2d3e] rounded-full overflow-hidden">
+        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(value, 100)}%`, backgroundColor: color }} />
+      </div>
+      <span className="text-xs text-[#94a3b8] w-10 text-right">{value}%</span>
+    </div>
+  )
+}
+
+function ContainerMetrics() {
+  const [containers, setContainers] = useState([])
+  const [stats, setStats] = useState({})
+  const intervalRef = useRef(null)
+
+  async function fetchStats(list) {
+    const running = list.filter(c => c.status === 'running')
+    const results = await Promise.allSettled(
+      running.map(c => api.metrics.container(c.id))
+    )
+    const next = {}
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') {
+        next[running[i].id] = r.value
+      }
+    })
+    setStats(next)
+  }
+
+  useEffect(() => {
+    api.containers.list(true).then(list => {
+      setContainers(list)
+      fetchStats(list)
+      intervalRef.current = setInterval(() => fetchStats(list), 5000)
+    })
+    return () => clearInterval(intervalRef.current)
+  }, [])
+
+  const running = containers.filter(c => c.status === 'running')
+  if (running.length === 0) return null
+
+  return (
+    <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl overflow-hidden">
+      <div className="px-5 py-3 border-b border-[#2a2d3e]">
+        <h3 className="text-xs text-[#94a3b8] font-medium uppercase tracking-wider">Por Container</h3>
+      </div>
+      <div className="divide-y divide-[#2a2d3e]">
+        {running.map(c => {
+          const s = stats[c.id]
+          const cpu = s ? s.cpu_percent : null
+          const memPct = s ? s.memory.percent : null
+          const memUsed = s ? fmt(s.memory.used) : null
+          const memLimit = s ? fmt(s.memory.limit) : null
+          return (
+            <div key={c.id} className="px-5 py-3 flex items-center gap-4">
+              <div className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
+              <p className="text-sm text-white font-mono w-40 truncate flex-shrink-0">{c.name}</p>
+              {s ? (
+                <>
+                  <div className="flex-1 flex items-center gap-1.5">
+                    <span className="text-[10px] text-[#64748b] w-7">CPU</span>
+                    <MiniBar value={cpu} color="#6366f1" />
+                  </div>
+                  <div className="flex-1 flex items-center gap-1.5">
+                    <span className="text-[10px] text-[#64748b] w-7">RAM</span>
+                    <MiniBar value={memPct} color="#22c55e" />
+                  </div>
+                  <p className="text-xs text-[#64748b] w-28 text-right flex-shrink-0">{memUsed} / {memLimit}</p>
+                </>
+              ) : (
+                <p className="text-xs text-[#475569]">carregando...</p>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function Metrics() {
   const [history, setHistory] = useState([])
   const [current, setCurrent] = useState(null)
@@ -57,7 +138,7 @@ export default function Metrics() {
   }, [])
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="h-full overflow-y-auto p-6 space-y-6">
       <div>
         <h1 className="text-xl font-bold text-white">Métricas</h1>
         <p className="text-sm text-[#94a3b8] mt-0.5">Monitoramento em tempo real</p>
@@ -126,6 +207,8 @@ export default function Metrics() {
           </ResponsiveContainer>
         </div>
       )}
+
+      <ContainerMetrics />
 
       {!current && (
         <div className="text-center text-[#64748b] py-16">Conectando ao WebSocket...</div>

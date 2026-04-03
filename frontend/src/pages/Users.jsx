@@ -163,7 +163,7 @@ export default function Users() {
   }
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="h-full overflow-y-auto p-6 space-y-5">
       {/* My account */}
       {currentUser && (
         <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl px-5 py-4 flex items-center gap-4">

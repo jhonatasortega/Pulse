@@ -120,6 +120,7 @@ async def container_terminal_ws(websocket: WebSocket, container_id: str):
     """Open an interactive shell inside a running container via docker exec."""
     await websocket.accept()
     # Try bash first, fall back to sh
-    cmd = ["docker", "exec", "-it", container_id, "sh", "-c",
+    docker_bin = "/usr/bin/docker"
+    cmd = [docker_bin, "exec", "-it", container_id, "sh", "-c",
            "bash 2>/dev/null || sh"]
     await _run_pty_session(websocket, cmd)
