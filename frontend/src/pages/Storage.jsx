@@ -215,12 +215,11 @@ function ContextMenu({ x, y, entry, clipboard, onAction, onClose }) {
 }
 
 // ─── file browser ──────────────────────────────────────────────────────────────
-function FileBrowser({ initialPath, onBack }) {
+function FileBrowser({ initialPath, onBack, clipboard, setClipboard }) {
   const [dir, setDir] = useState(null)
   const [path, setPath] = useState(initialPath)
   const [loading, setLoading] = useState(false)
   const [viewMode, setViewMode] = useState('list') // 'list' | 'grid'
-  const [clipboard, setClipboard] = useState(null) // { entry, op }
   const [contextMenu, setContextMenu] = useState(null) // { x, y, entry }
   const [renameTarget, setRenameTarget] = useState(null)
   const [mkdirOpen, setMkdirOpen] = useState(false)
@@ -481,6 +480,7 @@ export default function Storage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [browsePath, setBrowsePath] = useState(location.state?.browsePath || null)
+  const [clipboard, setClipboard] = useState(null) // lifted so it persists across disk switches
 
   async function load() {
     setLoading(true)
@@ -494,7 +494,12 @@ export default function Storage() {
   if (browsePath) {
     return (
       <div className="p-6 h-full flex flex-col">
-        <FileBrowser initialPath={browsePath} onBack={() => setBrowsePath(null)} />
+        <FileBrowser
+          initialPath={browsePath}
+          onBack={() => setBrowsePath(null)}
+          clipboard={clipboard}
+          setClipboard={setClipboard}
+        />
       </div>
     )
   }
