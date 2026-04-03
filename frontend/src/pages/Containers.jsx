@@ -9,6 +9,126 @@ import {
   ChevronDown, ChevronRight, Settings, Layers, TerminalSquare, Globe, Copy, Check,
 } from 'lucide-react'
 
+// ─── DNS setup wizard ─────────────────────────────────────────────────────────
+function DnsSetupModal({ onClose }) {
+  const [status, setStatus] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState('')
+  const [log, setLog] = useState('')
+  const [err, setErr] = useState('')
+
+  async function load() {
+    setLoading(true)
+    try { setStatus(await api.dns.status()) }
+    catch (e) { setErr(e.message) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { load() }, [])
+
+  async function run(step, fn) {
+    setBusy(step); setErr(''); setLog('')
+    try {
+      await fn()
+      setLog(`${step} concluído`)
+      await load()
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const steps = [
+    {
+      id: 'install',
+      title: '1. Instalar dnsmasq',
+      desc: 'Servidor DNS leve que serve os nomes para toda a rede local.',
+      done: status?.installed,
+      action: () => run('install', api.dns.install),
+      label: 'Instalar',
+    },
+    {
+      id: 'configure',
+      title: '2. Configurar',
+      desc: 'Define o dnsmasq para ler o /etc/hosts do Pi e propagar os nomes .local para a rede.',
+      done: status?.configured,
+      disabled: !status?.installed,
+      action: () => run('configure', api.dns.configure),
+      label: 'Configurar',
+    },
+    {
+      id: 'enable',
+      title: '3. Ativar e iniciar',
+      desc: 'Habilita o serviço para iniciar automaticamente e o coloca em execução.',
+      done: status?.running,
+      disabled: !status?.configured,
+      action: () => run('enable', api.dns.enable),
+      label: status?.running ? 'Reiniciar' : 'Ativar',
+    },
+    {
+      id: 'router',
+      title: '4. Apontar o DNS do roteador para o Pi',
+      desc: `No painel do seu roteador, defina o DNS primário como ${location.hostname}. Assim todos os dispositivos resolverão os nomes automaticamente, sem configuração.`,
+      done: false,
+      isInfo: true,
+    },
+  ]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-[#13151f] border border-[#2a2d3e] rounded-2xl w-full max-w-lg shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#2a2d3e]">
+          <div>
+            <p className="text-sm font-semibold text-white">Configurar DNS da Rede</p>
+            <p className="text-xs text-[#64748b] mt-0.5">Nomes .local acessíveis em todos os dispositivos</p>
+          </div>
+          <button onClick={onClose} className="text-[#64748b] hover:text-white"><X size={16} /></button>
+        </div>
+
+        <div className="p-5 space-y-3">
+          {loading ? (
+            <p className="text-center text-[#64748b] py-8">Verificando...</p>
+          ) : steps.map(step => (
+            <div key={step.id} className={`border rounded-xl p-4 transition-all ${step.done ? 'border-green-500/30 bg-green-500/5' : step.disabled ? 'border-[#2a2d3e] opacity-50' : 'border-[#2a2d3e]'}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 flex-1">
+                  <div className={`w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center mt-0.5 text-xs font-bold ${step.done ? 'bg-green-500/20 text-green-400' : 'bg-[#2a2d3e] text-[#64748b]'}`}>
+                    {step.done ? '✓' : step.id === 'router' ? '4' : ''}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">{step.title}</p>
+                    <p className="text-xs text-[#64748b] mt-0.5">{step.desc}</p>
+                  </div>
+                </div>
+                {!step.isInfo && !step.done && (
+                  <button
+                    onClick={step.action}
+                    disabled={!!busy || step.disabled}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs rounded-lg disabled:opacity-40 flex-shrink-0 transition-colors">
+                    {busy === step.id ? 'Aguarde...' : step.label}
+                  </button>
+                )}
+                {!step.isInfo && step.done && step.id === 'enable' && (
+                  <button
+                    onClick={step.action}
+                    disabled={!!busy}
+                    className="px-3 py-1.5 bg-[#2a2d3e] text-[#94a3b8] hover:text-white text-xs rounded-lg disabled:opacity-40 flex-shrink-0 transition-colors">
+                    {busy === step.id ? 'Aguarde...' : 'Reiniciar'}
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {log && <p className="text-xs text-green-400 px-1">{log}</p>}
+          {err && <p className="text-xs text-red-400 px-1">{err}</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Status badges ─────────────────────────────────────────────────────────────
 function StatusBadge({ status }) {
   const map = {
@@ -261,6 +381,7 @@ function LocalDomainTab({ container }) {
   const [applying, setApplying] = useState(false)
   const [applyStatus, setApplyStatus] = useState(null) // 'ok' | 'error'
   const [applyMsg, setApplyMsg] = useState('')
+  const [dnsModal, setDnsModal] = useState(false)
   const host = location.hostname
 
   const ports = Object.values(container.ports || {}).flat().filter(Boolean)
@@ -325,24 +446,48 @@ function LocalDomainTab({ container }) {
         </div>
       </div>
 
-      {/* Apply on Pi */}
+      {/* Seu dispositivo */}
+      <div className="border border-[#2a2d3e] rounded-xl p-4 space-y-3">
+        <div>
+          <p className="text-sm font-medium text-white">Seu PC / dispositivo</p>
+          <p className="text-xs text-[#64748b] mt-0.5">
+            Para acessar <code className="text-indigo-400">{hostname}</code> no navegador, adicione a linha abaixo ao <code className="text-indigo-400">hosts</code> do seu dispositivo e reinicie o navegador.
+          </p>
+        </div>
+        <div className="bg-[#0f1117] rounded-lg px-3 py-2 space-y-1">
+          <p className="text-[10px] text-[#475569]">Windows: <code className="text-[#64748b]">C:\Windows\System32\drivers\etc\hosts</code> (como administrador)</p>
+          <p className="text-[10px] text-[#475569]">Linux/Mac: <code className="text-[#64748b]">sudo nano /etc/hosts</code></p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={copy}
+            className={`flex-1 py-2 text-sm rounded-lg border transition-colors flex items-center justify-center gap-2 ${copied ? 'border-green-500/30 text-green-400 bg-green-500/10' : 'border-[#2a2d3e] text-[#94a3b8] hover:text-white hover:border-white/20'}`}>
+            {copied ? <Check size={13} /> : <Copy size={13} />}
+            {copied ? 'Copiado!' : 'Copiar linha'}
+          </button>
+        </div>
+      </div>
+
+      {/* Aplicar no Pi (container-to-container) */}
       <div className="border border-[#2a2d3e] rounded-xl p-4 space-y-3">
         <div>
           <p className="text-sm font-medium text-white">Aplicar no Pi</p>
-          <p className="text-xs text-[#64748b] mt-0.5">Adiciona automaticamente ao <code className="text-indigo-400">/etc/hosts</code> do servidor</p>
+          <p className="text-xs text-[#64748b] mt-0.5">Adiciona ao <code className="text-indigo-400">/etc/hosts</code> do servidor — útil para containers se comunicarem pelo nome</p>
         </div>
         <button onClick={applyOnPi} disabled={applying || !subdomain}
           className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg disabled:opacity-40 transition-colors">
-          {applying ? 'Aplicando...' : `Aplicar ${hostname}`}
+          {applying ? 'Aplicando...' : `Aplicar ${hostname} no Pi`}
         </button>
-        {applyStatus === 'ok' && (
-          <p className="text-xs text-green-400">{applyMsg}</p>
-        )}
-        {applyStatus === 'error' && (
-          <p className="text-xs text-red-400">{applyMsg}</p>
-        )}
-        <p className="text-xs text-[#475569]">Para acessar pelo nome no seu PC, adicione também ao <code className="text-[#64748b]">/etc/hosts</code> do seu dispositivo.</p>
+        {applyStatus === 'ok' && <p className="text-xs text-green-400">{applyMsg}</p>}
+        {applyStatus === 'error' && <p className="text-xs text-red-400">{applyMsg}</p>}
       </div>
+
+      {/* DNS wizard */}
+      <button onClick={() => setDnsModal(true)}
+        className="w-full py-2.5 border border-dashed border-[#2a2d3e] text-[#64748b] hover:text-white hover:border-indigo-400/40 text-xs rounded-xl transition-colors">
+        Configurar DNS da rede (.local para todos os dispositivos) →
+      </button>
+
+      {dnsModal && <DnsSetupModal onClose={() => setDnsModal(false)} />}
     </div>
   )
 }

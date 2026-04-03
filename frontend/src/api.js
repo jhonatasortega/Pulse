@@ -110,6 +110,14 @@ export const api = {
     container: (id) => request(`/metrics/container/${id}`),
   },
 
+  // DNS
+  dns: {
+    status:    () => request('/dns/status'),
+    install:   () => request('/dns/install',   { method: 'POST' }),
+    configure: () => request('/dns/configure', { method: 'POST' }),
+    enable:    () => request('/dns/enable',    { method: 'POST' }),
+  },
+
   // System
   system: {
     info: () => request('/system/info'),
