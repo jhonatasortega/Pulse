@@ -1,5 +1,5 @@
 """
-WebSocket terminal — spawns a PTY bash shell.
+WebSocket terminal — spawns a PTY bash shell or docker exec into a container.
 Uses subprocess + pty.openpty() (no os.fork) for asyncio compatibility.
 Linux only (ARM64 / Raspberry Pi).
 """
@@ -19,11 +19,8 @@ router = APIRouter()
 SHELL = os.getenv("SHELL", "/bin/bash")
 
 
-@router.websocket("/ws")
-async def terminal_ws(websocket: WebSocket):
-    await websocket.accept()
-
-    # Create PTY pair
+async def _run_pty_session(websocket: WebSocket, cmd: list):
+    """Shared PTY session handler for both system shell and docker exec."""
     try:
         master_fd, slave_fd = pty.openpty()
     except Exception as e:
@@ -31,10 +28,9 @@ async def terminal_ws(websocket: WebSocket):
         await websocket.close()
         return
 
-    # Spawn shell using the slave side as stdin/stdout/stderr
     try:
         proc = subprocess.Popen(
-            [SHELL, "--login"],
+            cmd,
             stdin=slave_fd,
             stdout=slave_fd,
             stderr=slave_fd,
@@ -44,23 +40,18 @@ async def terminal_ws(websocket: WebSocket):
     except Exception as e:
         os.close(master_fd)
         os.close(slave_fd)
-        await websocket.send_text(f"\r\n\x1b[31m[Terminal] Failed to start shell: {e}\x1b[0m\r\n")
+        await websocket.send_text(f"\r\n\x1b[31m[Terminal] Failed to start: {e}\x1b[0m\r\n")
         await websocket.close()
         return
 
-    # Slave fd is no longer needed in the parent process
     os.close(slave_fd)
 
-    # Make master non-blocking
     flags = fcntl.fcntl(master_fd, fcntl.F_GETFL)
     fcntl.fcntl(master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
-
-    loop = asyncio.get_event_loop()
 
     async def read_pty():
         while True:
             await asyncio.sleep(0.01)
-            # Check if process is still alive
             if proc.poll() is not None:
                 break
             try:
@@ -85,18 +76,13 @@ async def terminal_ws(websocket: WebSocket):
     try:
         while True:
             msg = await websocket.receive()
-
             if msg["type"] == "websocket.disconnect":
                 break
-
-            # Binary frames = keystrokes
             if msg.get("bytes"):
                 try:
                     os.write(master_fd, msg["bytes"])
                 except OSError:
                     break
-
-            # Text frames = resize or fallback keystrokes
             elif msg.get("text"):
                 text = msg["text"]
                 try:
@@ -108,10 +94,7 @@ async def terminal_ws(websocket: WebSocket):
                         os.write(master_fd, text.encode())
                     except OSError:
                         break
-
-    except WebSocketDisconnect:
-        pass
-    except Exception:
+    except (WebSocketDisconnect, Exception):
         pass
     finally:
         reader.cancel()
@@ -124,3 +107,19 @@ async def terminal_ws(websocket: WebSocket):
             os.close(master_fd)
         except Exception:
             pass
+
+
+@router.websocket("/ws")
+async def terminal_ws(websocket: WebSocket):
+    await websocket.accept()
+    await _run_pty_session(websocket, [SHELL, "--login"])
+
+
+@router.websocket("/ws/{container_id}")
+async def container_terminal_ws(websocket: WebSocket, container_id: str):
+    """Open an interactive shell inside a running container via docker exec."""
+    await websocket.accept()
+    # Try bash first, fall back to sh
+    cmd = ["docker", "exec", "-it", container_id, "sh", "-c",
+           "bash 2>/dev/null || sh"]
+    await _run_pty_session(websocket, cmd)

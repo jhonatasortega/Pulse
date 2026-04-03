@@ -176,3 +176,7 @@ export function logsSocket(containerId, onMessage) {
 export function terminalSocket() {
   return new WebSocket(wsUrl('/terminal/ws'))
 }
+
+export function containerTerminalSocket(containerId) {
+  return new WebSocket(wsUrl(`/terminal/ws/${containerId}`))
+}
