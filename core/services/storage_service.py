@@ -33,6 +33,18 @@ def get_disks() -> list:
             })
         except (PermissionError, OSError):
             pass
+
+    # Remove mountpoints that are parents of other mountpoints —
+    # e.g. drop /mnt if /mnt/storage is also listed (browsing /mnt only shows the child mount)
+    mountpoints = {d["mountpoint"] for d in disks}
+    disks = [
+        d for d in disks
+        if not any(
+            m != d["mountpoint"] and m.startswith(d["mountpoint"].rstrip("/") + "/")
+            for m in mountpoints
+        )
+    ]
+
     return disks
 
 
