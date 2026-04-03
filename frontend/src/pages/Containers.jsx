@@ -464,7 +464,6 @@ function ContainerDrawer({ container, onClose, onSaved }) {
   const tabs = [
     { id: 'logs',     label: 'Logs',     icon: FileText },
     { id: 'config',   label: 'Config',   icon: Settings },
-    ...(container.status === 'running' ? [{ id: 'terminal', label: 'Terminal', icon: TerminalSquare }] : []),
     { id: 'domain',   label: 'Domínio',  icon: Globe },
   ]
 
@@ -502,7 +501,6 @@ function ContainerDrawer({ container, onClose, onSaved }) {
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
           {tab === 'logs'     && <LogsTab container={container} />}
           {tab === 'config'   && <ConfigTab container={container} onSaved={onSaved} />}
-          {tab === 'terminal' && <TerminalTab container={container} />}
           {tab === 'domain'   && <div className="flex-1 overflow-y-auto"><LocalDomainTab container={container} /></div>}
         </div>
       </div>
