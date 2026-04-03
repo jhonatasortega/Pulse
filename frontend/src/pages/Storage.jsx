@@ -44,10 +44,11 @@ function Bar({ percent, warn = 70, crit = 85 }) {
 function RenameModal({ entry, onClose, onDone }) {
   const [name, setName] = useState(entry.name)
   const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
   async function save() {
     setSaving(true)
     try { await api.files.rename(entry.path, name); onDone(); onClose() }
-    catch (e) { alert(e.message) }
+    catch (e) { setErr(e.message) }
     finally { setSaving(false) }
   }
   return (
@@ -58,6 +59,7 @@ function RenameModal({ entry, onClose, onDone }) {
           onKeyDown={e => e.key === 'Enter' && save()}
           className="w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2"
           autoFocus />
+        {err && <p className="text-xs text-red-400">{err}</p>}
         <div className="flex justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 text-sm text-[#94a3b8] hover:text-white">Cancelar</button>
           <button onClick={save} disabled={saving || !name.trim()}
@@ -71,11 +73,12 @@ function RenameModal({ entry, onClose, onDone }) {
 function MkdirModal({ currentPath, onClose, onDone }) {
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
   async function save() {
     if (!name.trim()) return
     setSaving(true)
     try { await api.files.mkdir(`${currentPath}/${name.trim()}`); onDone(); onClose() }
-    catch (e) { alert(e.message) }
+    catch (e) { setErr(e.message) }
     finally { setSaving(false) }
   }
   return (
@@ -86,6 +89,7 @@ function MkdirModal({ currentPath, onClose, onDone }) {
           onKeyDown={e => e.key === 'Enter' && save()}
           placeholder="Nome da pasta"
           className="w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2" autoFocus />
+        {err && <p className="text-xs text-red-400">{err}</p>}
         <div className="flex justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 text-sm text-[#94a3b8] hover:text-white">Cancelar</button>
           <button onClick={save} disabled={saving || !name.trim()}
@@ -99,11 +103,12 @@ function MkdirModal({ currentPath, onClose, onDone }) {
 function NewFileModal({ currentPath, onClose, onDone }) {
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
   async function save() {
     if (!name.trim()) return
     setSaving(true)
     try { await api.files.writeText(`${currentPath}/${name.trim()}`, ''); onDone(); onClose() }
-    catch (e) { alert(e.message) }
+    catch (e) { setErr(e.message) }
     finally { setSaving(false) }
   }
   return (
@@ -114,6 +119,7 @@ function NewFileModal({ currentPath, onClose, onDone }) {
           onKeyDown={e => e.key === 'Enter' && save()}
           placeholder="nome.txt"
           className="w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2" autoFocus />
+        {err && <p className="text-xs text-red-400">{err}</p>}
         <div className="flex justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 text-sm text-[#94a3b8] hover:text-white">Cancelar</button>
           <button onClick={save} disabled={saving || !name.trim()}
@@ -128,15 +134,16 @@ function EditorModal({ entry, onClose, onSaved }) {
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
   useEffect(() => {
     api.files.read(entry.path)
       .then(r => { setContent(r.content); setLoading(false) })
-      .catch(e => { alert(e.message); onClose() })
+      .catch(e => { setErr(e.message); setLoading(false) })
   }, [entry.path])
   async function save() {
     setSaving(true)
     try { await api.files.writeText(entry.path, content); onSaved() }
-    catch (e) { alert(e.message) }
+    catch (e) { setErr(e.message) }
     finally { setSaving(false) }
   }
   return (
@@ -155,6 +162,7 @@ function EditorModal({ entry, onClose, onSaved }) {
             <button onClick={onClose} className="text-[#94a3b8] hover:text-white"><X size={18} /></button>
           </div>
         </div>
+        {err && <div className="px-5 py-2 text-xs text-red-400 bg-red-500/10 border-b border-red-500/20 flex-shrink-0">{err}</div>}
         {loading ? (
           <div className="flex-1 flex items-center justify-center text-[#64748b]">Carregando...</div>
         ) : (

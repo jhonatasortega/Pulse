@@ -462,34 +462,33 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Running apps grid */}
-        {runningGroups.length > 0 && (
-          <div className="flex flex-wrap gap-4">
-            {/* Fixed storage tile */}
-            <div onClick={() => setStorageOpen(true)}
-              className={`w-[120px] h-[148px] flex-shrink-0 border rounded-2xl p-4 flex flex-col items-center gap-3 cursor-pointer transition-all hover:border-indigo-400/40 ${hasWallpaper ? 'bg-black/30 backdrop-blur-md border-white/10' : 'bg-[#1a1d27] border-[#2a2d3e]'}`}>
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-400/20 flex items-center justify-center">
-                <HardDrive size={26} className="text-indigo-400" />
-              </div>
-              <div className="text-center">
-                <p className="text-xs font-semibold text-white leading-tight">Arquivos</p>
-                <p className="text-[10px] mt-0.5 text-indigo-400">armazenamento</p>
-              </div>
+        {/* Fixed tiles + running apps */}
+        <div className="flex flex-wrap gap-4">
+          {/* Storage tile — always visible */}
+          <div onClick={() => setStorageOpen(true)}
+            className={`w-[120px] h-[148px] flex-shrink-0 border rounded-2xl p-4 flex flex-col items-center gap-3 cursor-pointer transition-all hover:border-indigo-400/40 ${hasWallpaper ? 'bg-black/30 backdrop-blur-md border-white/10' : 'bg-[#1a1d27] border-[#2a2d3e]'}`}>
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-400/20 flex items-center justify-center">
+              <HardDrive size={26} className="text-indigo-400" />
             </div>
-            {runningGroups.map(g => (
-              <GroupTile key={g.id} group={g} busy={busy[g.id]}
-                onStart={id => groupAction(id, () => api.groups.start(id))}
-                onStop={id => groupAction(id, () => api.groups.stop(id))}
-                onRestart={id => groupAction(id, () => api.groups.restart(id))}
-              />
-            ))}
-            <div onClick={() => navigate('/store')}
-              className={`w-[120px] h-[148px] flex-shrink-0 border border-dashed rounded-2xl p-4 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-[#6366f1]/50 transition-all ${hasWallpaper ? 'bg-black/20 backdrop-blur-sm border-white/20' : 'bg-[#1a1d27] border-[#2a2d3e]'}`}>
-              <div className="w-14 h-14 rounded-2xl border-2 border-dashed border-[#2a2d3e] flex items-center justify-center text-[#64748b] text-2xl">+</div>
-              <p className="text-[10px] text-[#64748b] text-center">Instalar app</p>
+            <div className="text-center">
+              <p className="text-xs font-semibold text-white leading-tight">Arquivos</p>
+              <p className="text-[10px] mt-0.5 text-indigo-400">armazenamento</p>
             </div>
           </div>
-        )}
+
+          {runningGroups.map(g => (
+            <GroupTile key={g.id} group={g} busy={busy[g.id]}
+              onStart={id => groupAction(id, () => api.groups.start(id))}
+              onStop={id => groupAction(id, () => api.groups.stop(id))}
+              onRestart={id => groupAction(id, () => api.groups.restart(id))}
+            />
+          ))}
+          <div onClick={() => navigate('/store')}
+            className={`w-[120px] h-[148px] flex-shrink-0 border border-dashed rounded-2xl p-4 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-[#6366f1]/50 transition-all ${hasWallpaper ? 'bg-black/20 backdrop-blur-sm border-white/20' : 'bg-[#1a1d27] border-[#2a2d3e]'}`}>
+            <div className="w-14 h-14 rounded-2xl border-2 border-dashed border-[#2a2d3e] flex items-center justify-center text-[#64748b] text-2xl">+</div>
+            <p className="text-[10px] text-[#64748b] text-center">Instalar app</p>
+          </div>
+        </div>
 
         {/* Stopped */}
         {stoppedGroups.length > 0 && (

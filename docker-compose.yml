@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: pulse-backend:1.0.0
     container_name: pulse_backend
     ports:
       - "3000:3000"
