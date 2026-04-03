@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, metricsSocket } from '../api'
 import { memCache, bust } from '../cache'
 import { auth } from '../auth'
-import { Play, Square, RotateCw, ExternalLink, X, Image, Upload } from 'lucide-react'
+import { Play, Square, RotateCw, ExternalLink, X, Image, Upload, HardDrive } from 'lucide-react'
 
 function greeting() {
   const h = new Date().getHours()
@@ -37,6 +37,65 @@ function groupIcon(name) {
   return iconMap[key] || '📦'
 }
 
+
+// ─── storage modal (disks only) ───────────────────────────────────────────────
+function StorageModal({ onClose }) {
+  const [disks, setDisks] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.storage.info()
+      .then(d => setDisks(d.disks || []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-2xl w-full max-w-md shadow-2xl"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#2a2d3e]">
+          <div className="flex items-center gap-2">
+            <HardDrive size={16} className="text-indigo-400" />
+            <p className="text-sm font-semibold text-white">Armazenamento</p>
+          </div>
+          <button onClick={onClose} className="text-[#64748b] hover:text-white"><X size={16} /></button>
+        </div>
+        <div className="p-5 space-y-3">
+          {loading ? (
+            <p className="text-center text-[#64748b] py-8">Carregando...</p>
+          ) : disks.length === 0 ? (
+            <p className="text-center text-[#64748b] py-8">Nenhum disco encontrado</p>
+          ) : disks.map((disk, i) => (
+            <div key={i} className="bg-[#0f1117] border border-[#2a2d3e] rounded-xl p-4">
+              <div className="flex items-center justify-between mb-1">
+                <div>
+                  <p className="text-sm font-semibold text-white">{disk.mountpoint}</p>
+                  <p className="text-xs text-[#64748b]">{disk.device} · {disk.fstype}</p>
+                </div>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                  disk.percent > 85 ? 'bg-red-500/10 text-red-400' :
+                  disk.percent > 70 ? 'bg-yellow-500/10 text-yellow-400' :
+                  'bg-indigo-500/10 text-indigo-400'
+                }`}>{disk.percent}%</span>
+              </div>
+              <div className="w-full bg-[#2a2d3e] rounded-full h-1.5 mt-2">
+                <div className={`h-1.5 rounded-full transition-all ${
+                  disk.percent > 85 ? 'bg-red-500' : disk.percent > 70 ? 'bg-yellow-500' : 'bg-indigo-500'
+                }`} style={{ width: `${Math.min(disk.percent, 100)}%` }} />
+              </div>
+              <div className="flex justify-between mt-2 text-xs text-[#64748b]">
+                <span>{fmt(disk.used)} usado</span>
+                <span>{fmt(disk.free)} livre</span>
+                <span>{fmt(disk.total)} total</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ─── wallpaper settings panel ─────────────────────────────────────────────────
 const GRADIENT_PRESETS = [
@@ -281,6 +340,7 @@ export default function Dashboard() {
   const [busy, setBusy] = useState({})
   const [wallpaper, setWallpaper] = useState(getWallpaper)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [storageOpen, setStorageOpen] = useState(false)
   const settingsRef = useRef(null)
   const navigate = useNavigate()
 
@@ -322,6 +382,7 @@ export default function Dashboard() {
 
   return (
     <div className="h-full overflow-y-auto relative">
+      {storageOpen && <StorageModal onClose={() => setStorageOpen(false)} />}
 
       <div className="relative z-10 p-8 space-y-8">
         {/* Header row */}
@@ -394,6 +455,17 @@ export default function Dashboard() {
         {/* Running apps grid */}
         {runningGroups.length > 0 && (
           <div className="flex flex-wrap gap-4">
+            {/* Fixed storage tile */}
+            <div onClick={() => setStorageOpen(true)}
+              className={`w-[120px] h-[148px] flex-shrink-0 border rounded-2xl p-4 flex flex-col items-center gap-3 cursor-pointer transition-all hover:border-indigo-400/40 ${hasWallpaper ? 'bg-black/30 backdrop-blur-md border-white/10' : 'bg-[#1a1d27] border-[#2a2d3e]'}`}>
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-400/20 flex items-center justify-center">
+                <HardDrive size={26} className="text-indigo-400" />
+              </div>
+              <div className="text-center">
+                <p className="text-xs font-semibold text-white leading-tight">Arquivos</p>
+                <p className="text-[10px] mt-0.5 text-indigo-400">armazenamento</p>
+              </div>
+            </div>
             {runningGroups.map(g => (
               <GroupTile key={g.id} group={g} busy={busy[g.id]}
                 onStart={id => groupAction(id, () => api.groups.start(id))}
