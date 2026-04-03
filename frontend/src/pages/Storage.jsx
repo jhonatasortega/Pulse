@@ -219,6 +219,7 @@ function FileBrowser({ initialPath, onBack, clipboard, setClipboard }) {
   const [dir, setDir] = useState(null)
   const [path, setPath] = useState(initialPath)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [viewMode, setViewMode] = useState('list') // 'list' | 'grid'
   const [contextMenu, setContextMenu] = useState(null) // { x, y, entry }
   const [renameTarget, setRenameTarget] = useState(null)
@@ -227,12 +228,17 @@ function FileBrowser({ initialPath, onBack, clipboard, setClipboard }) {
   const [editorTarget, setEditorTarget] = useState(null)
   const uploadRef = useRef(null)
 
+  function showError(msg) {
+    setError(msg)
+    setTimeout(() => setError(''), 4000)
+  }
+
   const browse = useCallback(async (p) => {
     setLoading(true)
     try {
       const data = await api.files.browse(p)
       setDir(data); setPath(data.path)
-    } catch (e) { alert(e.message) }
+    } catch (e) { showError(e.message) }
     finally { setLoading(false) }
   }, [])
 
@@ -264,12 +270,12 @@ function FileBrowser({ initialPath, onBack, clipboard, setClipboard }) {
           if (clipboard.op === 'copy') await api.files.copy(clipboard.entry.path, path)
           else { await api.files.move(clipboard.entry.path, path); setClipboard(null) }
           browse(path)
-        } catch (e) { alert(e.message) }
+        } catch (e) { showError(e.message) }
         break
       case 'rename': setRenameTarget(entry); break
       case 'delete':
         if (!confirm(`Excluir "${entry.name}"?`)) break
-        try { await api.files.delete(entry.path); browse(path) } catch (e) { alert(e.message) }
+        try { await api.files.delete(entry.path); browse(path) } catch (e) { showError(e.message) }
         break
       case 'download':
         window.open(api.files.downloadUrl(entry.path), '_blank')
@@ -290,7 +296,7 @@ function FileBrowser({ initialPath, onBack, clipboard, setClipboard }) {
       })
       if (!res.ok) throw new Error(await res.text())
       browse(path)
-    } catch (e) { alert(e.message) }
+    } catch (e) { showError(e.message) }
     e.target.value = ''
   }
 
@@ -298,6 +304,11 @@ function FileBrowser({ initialPath, onBack, clipboard, setClipboard }) {
 
   return (
     <div className="flex flex-col h-full" onContextMenu={e => handleContextMenu(e, null)}>
+      {error && (
+        <div className="mb-3 px-4 py-2.5 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-400 flex-shrink-0">
+          {error}
+        </div>
+      )}
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-3 flex-wrap mb-4 flex-shrink-0">
         <div className="flex items-center gap-2 flex-wrap">

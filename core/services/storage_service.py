@@ -4,31 +4,35 @@ import psutil
 
 
 def get_disks() -> list:
+    SKIP_FS = {"tmpfs", "devtmpfs", "devfs", "squashfs", "overlay", "vfat", ""}
+    SKIP_MP = {"/mnt", "/media", "/home"}  # bare parents with no real content
+
+    # /host first (Pi root), then /mnt/* and /media/* direct mounts, skip /host/* submounts
+    def priority(mp):
+        if mp == "/host":           return 0
+        if mp.startswith("/mnt/"):  return 1
+        if mp.startswith("/media/"): return 2
+        if mp.startswith("/host/"): return 99  # duplicate of a direct mount
+        return 50
+
+    partitions = sorted(psutil.disk_partitions(all=False), key=lambda p: priority(p.mountpoint))
+
     seen_devices = set()
     disks = []
-    # Prefer real mounts (/mnt, /media, /) over bind-mounted duplicates
-    priority_order = ["/", "/mnt", "/media", "/home"]
-    partitions = sorted(
-        psutil.disk_partitions(all=False),
-        key=lambda p: next((i for i, prefix in enumerate(priority_order) if p.mountpoint.startswith(prefix)), 99)
-    )
     for part in partitions:
-        # Skip pseudo filesystems
-        if part.fstype in ("tmpfs", "devtmpfs", "devfs", "squashfs", "overlay", ""):
+        mp = part.mountpoint
+        if part.fstype in SKIP_FS:
             continue
-        # Deduplicate by device
+        if mp in SKIP_MP or priority(mp) == 99:
+            continue
         if part.device in seen_devices:
             continue
         seen_devices.add(part.device)
         try:
-            usage = psutil.disk_usage(part.mountpoint)
-            # The host root filesystem appears as /mnt inside the container
-            # (because docker-compose mounts /mnt from host, and mmcblk0p2 IS the host root).
-            # We mount / at /host so the user can browse the full SD card.
-            browse_path = "/host" if part.mountpoint == "/" else part.mountpoint
+            usage = psutil.disk_usage(mp)
             disks.append({
                 "device": part.device,
-                "mountpoint": browse_path,
+                "mountpoint": mp,
                 "fstype": part.fstype,
                 "total": usage.total,
                 "used": usage.used,
@@ -37,7 +41,6 @@ def get_disks() -> list:
             })
         except (PermissionError, OSError):
             pass
-
     return disks
 
 
