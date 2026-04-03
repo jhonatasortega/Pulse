@@ -482,6 +482,13 @@ export default function Storage() {
   const [browsePath, setBrowsePath] = useState(location.state?.browsePath || null)
   const [clipboard, setClipboard] = useState(null) // lifted so it persists across disk switches
 
+  // Re-read location.state when navigating to /storage while already on it
+  useEffect(() => {
+    if (location.state?.browsePath) {
+      setBrowsePath(location.state.browsePath)
+    }
+  }, [location.state?.browsePath])
+
   async function load() {
     setLoading(true)
     try { setData(await api.storage.info()) }
@@ -495,6 +502,7 @@ export default function Storage() {
     return (
       <div className="p-6 h-full flex flex-col">
         <FileBrowser
+          key={browsePath}
           initialPath={browsePath}
           onBack={() => setBrowsePath(null)}
           clipboard={clipboard}
