@@ -533,11 +533,11 @@ function ContainerDrawer({ container, onClose, onSaved }) {
         </div>
 
         {/* Tab content */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden flex flex-col min-h-0">
           {tab === 'logs'     && <LogsTab container={container} />}
           {tab === 'config'   && <ConfigTab container={container} onSaved={onSaved} />}
           {tab === 'terminal' && <TerminalTab container={container} />}
-          {tab === 'domain'   && <LocalDomainTab container={container} />}
+          {tab === 'domain'   && <div className="flex-1 overflow-y-auto"><LocalDomainTab container={container} /></div>}
         </div>
       </div>
     </div>
