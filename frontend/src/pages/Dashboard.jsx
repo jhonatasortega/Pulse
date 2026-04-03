@@ -313,8 +313,6 @@ export default function Dashboard() {
 
   return (
     <div className="h-full overflow-y-auto relative">
-      {/* overlay for readability when wallpaper is set */}
-      {hasWallpaper && <div className="absolute inset-0 bg-black/40 pointer-events-none" />}
 
       <div className="relative z-10 p-8 space-y-8">
         {/* Header row */}
