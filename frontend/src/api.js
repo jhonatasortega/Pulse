@@ -146,7 +146,16 @@ export const api = {
       request('/files/copy', { method: 'POST', body: JSON.stringify({ src, dest_dir }) }),
     move: (src, dest_dir) =>
       request('/files/move', { method: 'POST', body: JSON.stringify({ src, dest_dir }) }),
-    downloadUrl: (path) => `/api/files/download?path=${encodeURIComponent(path)}`,
+    downloadUrl: (path) => {
+      const params = new URLSearchParams({ path })
+      const key  = auth.getKey()
+      const user = auth.getUser()
+      const pass = auth.getPass()
+      if (key)  params.set('key',  key)
+      if (user) params.set('user', user.username)
+      if (pass) params.set('pass', pass)
+      return `/api/files/download?${params.toString()}`
+    },
   },
 
 }

@@ -1,4 +1,5 @@
 import os
+from urllib.parse import quote
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -141,7 +142,9 @@ def download_file(path: str):
         p = file_service._safe_path(path)
         if not p.is_file():
             raise HTTPException(404, "Not a file")
-        return FileResponse(str(p), filename=p.name)
+        encoded_name = quote(p.name, safe='')
+        headers = {'Content-Disposition': f"attachment; filename*=UTF-8''{encoded_name}"}
+        return FileResponse(str(p), headers=headers, media_type='application/octet-stream')
     except PermissionError as e:
         raise HTTPException(403, str(e))
     except Exception as e:
