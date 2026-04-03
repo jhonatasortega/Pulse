@@ -49,7 +49,11 @@ def _group_containers(containers: list) -> list:
                 display_name = labels.get("pulse.display_name", "")
         g["ports"] = ports
         g["icon_url"] = icon_url
-        g["display_name"] = display_name or g["name"]
+        # Fallback: strip pulse_ prefix and prettify the container/group name
+        if not display_name:
+            raw = g["name"].removeprefix("pulse_").replace("-", " ").replace("_", " ").title()
+            display_name = raw
+        g["display_name"] = display_name
 
         result.append(g)
 
