@@ -23,11 +23,8 @@ def serialize_container(c) -> dict:
             if bindings:
                 ports[container_port] = [b["HostPort"] for b in bindings]
 
-    # Safely resolve image name — image may have been deleted from local store
-    try:
-        image_name = c.image.tags[0] if c.image.tags else c.image.short_id
-    except Exception:
-        image_name = c.attrs.get("Config", {}).get("Image", "unknown")
+    # Evitar chamadas N+1 para 'c.image' e pegar diretamente dos atributos, que é mais rápido
+    image_name = c.attrs.get("Config", {}).get("Image", "unknown")
 
     return {
         "id": c.short_id,

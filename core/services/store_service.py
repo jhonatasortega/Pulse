@@ -98,23 +98,74 @@ def _fetch_tmc_store(force: bool = False) -> list:
     if not force and _tmc_cache["apps"] and (now - _tmc_cache["fetched_at"]) < CACHE_TTL:
         return _tmc_cache["apps"]
 
-    print("[StoreService] Fetching TMC store from GitHub...")
-    entries = _fetch_json(TMC_API_URL)
-    if not entries:
+    print("[StoreService] Fetching TMC store from GitHub (ZIP)...")
+    import urllib.request
+    import zipfile
+    import io
+
+    ZIP_URL = "https://github.com/mariosemes/CasaOS-TMCstore/archive/refs/heads/main.zip"
+    try:
+        req = urllib.request.Request(ZIP_URL, headers={"User-Agent": "Pulse/1.0"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = r.read()
+    except Exception as e:
+        print(f"[StoreService] fetch zip error: {e}")
         return _tmc_cache["apps"]
 
-    app_ids = [e["name"] for e in entries if e.get("type") == "dir"]
     apps = []
-    with ThreadPoolExecutor(max_workers=12) as ex:
-        futures = {ex.submit(_fetch_tmc_app, aid): aid for aid in app_ids}
-        for f in as_completed(futures):
-            result = f.result()
-            if result:
-                apps.append(result)
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            names = zf.namelist()
+            app_dirs = set()
+            for n in names:
+                if "/Apps/" in n and n.endswith("/app.json"):
+                    app_dirs.add(n.rsplit("/", 1)[0])
+
+            for d in app_dirs:
+                app_id = d.split("/")[-1]
+                try:
+                    meta = json.loads(zf.read(f"{d}/app.json").decode("utf-8"))
+                except Exception:
+                    continue
+
+                compose_text = ""
+                try:
+                    compose_text = zf.read(f"{d}/docker-compose.yml").decode("utf-8", errors="replace")
+                except Exception:
+                    pass
+
+                image = meta.get("image", "")
+                tag   = meta.get("tag", "latest")
+                if image and not image.endswith(f":{tag}"):
+                    image = f"{image}:{tag}"
+                if compose_text and not image:
+                    image = _parse_compose_image(compose_text) or ""
+                port     = _parse_compose_port(compose_text) if compose_text else None
+                icon_url = f"https://cdn.jsdelivr.net/gh/mariosemes/CasaOS-TMCstore@main/Apps/{app_id}/icon.png"
+                apps.append({
+                    "id":          f"store-{app_id}",
+                    "name":        meta.get("app", app_id),
+                    "description": meta.get("description", ""),
+                    "version":     tag,
+                    "category":    "store",
+                    "source":      "tmc",
+                    "store_name":  "TMC Store",
+                    "icon_url":    icon_url,
+                    "app_url":     meta.get("app_url", ""),
+                    "docker": {
+                        "image":   image,
+                        "ports":   [f"{port}:{port}"] if port else [],
+                        "env":     _parse_compose_env(compose_text) if compose_text else [],
+                        "volumes": [],
+                        "restart": "unless-stopped",
+                    },
+                })
+    except Exception as e:
+        print(f"[StoreService] Error parsing zip: {e}")
 
     apps.sort(key=lambda a: a["name"].lower())
     _tmc_cache = {"apps": apps, "fetched_at": now}
-    print(f"[StoreService] TMC: loaded {len(apps)} apps")
+    print(f"[StoreService] TMC: loaded {len(apps)} apps via zip")
     return apps
 
 

@@ -653,7 +653,7 @@ export default function Containers() {
   const runningContainers = groups.reduce((s, g) => s + g.containers.filter(c => c.status === 'running').length, 0)
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-6 space-y-4 h-full overflow-y-auto">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-white">Containers</h1>
