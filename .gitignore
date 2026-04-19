@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+.claude/
 
 # Node
 frontend/node_modules/
