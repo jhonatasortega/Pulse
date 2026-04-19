@@ -76,11 +76,11 @@ def get_docker_volumes() -> list:
 
 
 def get_available_disks() -> list:
-    """Find block devices with a filesystem but no mountpoint using lsblk."""
+    """Find block devices with a filesystem but no mountpoint using lsblk and blkid."""
     try:
         import json
         r = subprocess.run(
-            ["lsblk", "-J", "-o", "NAME,FSTYPE,LABEL,UUID,FSAVAIL,FSSIZE,MOUNTPOINT,SIZE"],
+            ["lsblk", "-J", "-o", "NAME,FSTYPE,LABEL,UUID,FSAVAIL,FSSIZE,MOUNTPOINT,SIZE,TYPE"],
             capture_output=True, text=True, timeout=5,
         )
         if r.returncode != 0:
@@ -89,19 +89,41 @@ def get_available_disks() -> list:
         data = json.loads(r.stdout)
         available = []
 
+        def get_blkid_info(device):
+            try:
+                # blkid -o export is easy to parse
+                br = subprocess.run(["blkid", "-o", "export", device], capture_output=True, text=True, timeout=2)
+                if br.returncode != 0: return {}
+                info = {}
+                for line in br.stdout.splitlines():
+                    if "=" in line:
+                        k, v = line.split("=", 1)
+                        info[k.lower()] = v
+                return info
+            except: return {}
+
         def walk(devices):
             for dev in devices:
-                # We want partitions (usually have a type and fstype) that aren't mounted
-                # and have a UUID (indicating they are formatted)
-                if dev.get("fstype") and not dev.get("mountpoint"):
-                    available.append({
-                        "name": dev.get("name"),
-                        "label": dev.get("label") or dev.get("name"),
-                        "device": f"/dev/{dev.get('name')}",
-                        "fstype": dev.get("fstype"),
-                        "uuid": dev.get("uuid"),
-                        "size": dev.get("size"),
-                    })
+                # We want partitions/disks that aren't mounted
+                if not dev.get("mountpoint") and dev.get("type") in ["part", "disk"]:
+                    name = dev.get("name")
+                    device_path = f"/dev/{name}"
+                    
+                    # LSBLK might miss fstype/uuid in containers, probe with blkid
+                    info = get_blkid_info(device_path)
+                    fstype = dev.get("fstype") or info.get("type")
+                    
+                    # Only include if it has a filesystem (formatted)
+                    if fstype and fstype not in ["swap"]:
+                        available.append({
+                            "name": name,
+                            "label": dev.get("label") or info.get("label") or name,
+                            "device": device_path,
+                            "fstype": fstype,
+                            "uuid": dev.get("uuid") or info.get("uuid"),
+                            "size": dev.get("size"),
+                        })
+                
                 if "children" in dev:
                     walk(dev["children"])
 
