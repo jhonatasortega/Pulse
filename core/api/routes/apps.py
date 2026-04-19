@@ -31,6 +31,14 @@ class EnvVar(BaseModel):
     value: str
 
 
+class HealthCheck(BaseModel):
+    test: List[str] = []
+    interval: str = "30s"
+    timeout: str = "10s"
+    retries: int = 3
+    start_period: str = "0s"
+
+
 class CustomInstallRequest(BaseModel):
     image: str
     tag: str = "latest"
@@ -44,6 +52,7 @@ class CustomInstallRequest(BaseModel):
     webui_port: str = ""
     webui_path: str = "/"
     hostname: Optional[str] = None
+    healthcheck: Optional[HealthCheck] = None
 
 
 @router.get("/templates")
@@ -160,6 +169,18 @@ def update_app(app_id: str):
 @router.post("/custom-install")
 def custom_install(req: CustomInstallRequest):
     """Install any Docker image with full configuration (CasaOS-style)."""
+
+    def duration_to_ns(d: str) -> int:
+        if not d: return 0
+        import re
+        m = re.match(r"(\d+)(ms|s|m|h)", d.lower().strip())
+        if not m:
+            try: return int(d) * 1_000_000_000  # Default to seconds if just number
+            except: return 0
+        val, unit = int(m.group(1)), m.group(2)
+        mult = {"ms": 10**6, "s": 10**9, "m": 60*10**9, "h": 3600*10**9}
+        return val * mult.get(unit, 10**9)
+
     full_image = f"{req.image}:{req.tag}" if req.tag else req.image
 
     ports = {}
@@ -195,6 +216,16 @@ def custom_install(req: CustomInstallRequest):
         "labels": labels,
         "hostname": req.hostname,
     }
+
+    if req.healthcheck and req.healthcheck.test:
+        config["healthcheck"] = {
+            "test": req.healthcheck.test,
+            "interval": duration_to_ns(req.healthcheck.interval),
+            "timeout": duration_to_ns(req.healthcheck.timeout),
+            "retries": req.healthcheck.retries,
+            "start_period": duration_to_ns(req.healthcheck.start_period),
+        }
+
     if req.network and req.network != "bridge":
         config["network"] = req.network
 

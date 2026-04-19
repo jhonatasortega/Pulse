@@ -310,7 +310,11 @@ function ListField({ label, items, onChange, fields, placeholders }) {
 
 // ─── docker-compose parser (basic) ────────────────────────────────────────────
 function parseCompose(text) {
-  const result = { image: '', tag: 'latest', name: '', hostname: '', ports: [], volumes: [], env: [], network: 'bridge', restart: 'unless-stopped' }
+  const result = {
+    image: '', tag: 'latest', name: '', hostname: '',
+    ports: [], volumes: [], env: [], network: 'bridge', restart: 'unless-stopped',
+    healthcheck: { test: [], interval: '30s', timeout: '10s', retries: 3, start_period: '0s' }
+  }
   if (!text) return result
 
   const lines = text.split('\n')
@@ -358,6 +362,9 @@ function parseCompose(text) {
       } else if (trimmed === 'environment:') {
         currentSection = 'environment'
         sectionIndent = indent
+      } else if (trimmed === 'healthcheck:') {
+        currentSection = 'healthcheck'
+        sectionIndent = indent
       }
       continue
     }
@@ -369,6 +376,18 @@ function parseCompose(text) {
     } else if (currentSection === 'volumes') {
       const resv = trimmed.match(/^-\s*["']?([^:'"]+):([^:'"#\s]+)["']?/)
       if (resv) result.volumes.push({ host: resv[1].trim(), container: resv[2].trim() })
+    } else if (currentSection === 'healthcheck') {
+      if (trimmed.startsWith('test:')) {
+        const testStr = trimmed.replace('test:', '').trim()
+        if (testStr.startsWith('[') && testStr.endsWith(']')) {
+          try { result.healthcheck.test = JSON.parse(testStr.replace(/'/g, '"')) } catch {}
+        } else {
+          result.healthcheck.test = ["CMD-SHELL", testStr]
+        }
+      } else if (trimmed.startsWith('interval:')) result.healthcheck.interval = trimmed.replace('interval:', '').trim()
+      else if (trimmed.startsWith('timeout:')) result.healthcheck.timeout = trimmed.replace('timeout:', '').trim()
+      else if (trimmed.startsWith('retries:')) result.healthcheck.retries = parseInt(trimmed.replace('retries:', '').trim())
+      else if (trimmed.startsWith('start_period:')) result.healthcheck.start_period = trimmed.replace('start_period:', '').trim()
     } else if (currentSection === 'environment') {
       // list form: - KEY=VAL
       const ml = trimmed.match(/^-\s*([\w.-]+)=(.*)/)
@@ -395,6 +414,10 @@ function ManualInstallModal({ onClose, onDone }) {
     network: 'bridge', restart: 'unless-stopped',
     webui_port: '', webui_path: '/',
   })
+  const [healthcheck, setHealthcheck] = useState({
+    test: '', interval: '30s', timeout: '10s', retries: 3, start_period: '0s'
+  })
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const [ports, setPorts] = useState([])
   const [volumes, setVolumes] = useState([])
   const [env, setEnv] = useState([])
@@ -415,6 +438,16 @@ function ManualInstallModal({ onClose, onDone }) {
       network:   parsed.network || f.network,
       restart:   parsed.restart || f.restart,
     }))
+    if (parsed.healthcheck && parsed.healthcheck.test.length) {
+      setHealthcheck({
+        test: parsed.healthcheck.test.join(' '),
+        interval: parsed.healthcheck.interval,
+        timeout: parsed.healthcheck.timeout,
+        retries: parsed.healthcheck.retries,
+        start_period: parsed.healthcheck.start_period,
+      })
+      setAdvancedOpen(true)
+    }
     if (parsed.ports.length)   setPorts(parsed.ports)
     if (parsed.volumes.length) setVolumes(parsed.volumes)
     if (parsed.env.length)     setEnv(parsed.env)
@@ -431,6 +464,13 @@ function ManualInstallModal({ onClose, onDone }) {
         ports: ports.map(p => ({ host: p.host, container: p.container, protocol: p.protocol || 'tcp' })),
         volumes: volumes.map(v => ({ host: v.host, container: v.container, mode: v.mode || 'rw' })),
         env: env.map(e => ({ key: e.key, value: e.value })),
+        healthcheck: healthcheck.test ? {
+          test: healthcheck.test.split(' '),
+          interval: healthcheck.interval,
+          timeout: healthcheck.timeout,
+          retries: parseInt(healthcheck.retries),
+          start_period: healthcheck.start_period,
+        } : null
       })
       onDone(); onClose()
     } catch (err) { setError(err.message) }
@@ -560,6 +600,47 @@ function ManualInstallModal({ onClose, onDone }) {
           <ListField label="Environment Variables" items={env} onChange={setEnv}
             fields={['key', 'value']}
             placeholders={{ key: 'KEY', value: 'value' }} />
+
+          {/* Advanced Section */}
+          <div className="pt-2">
+            <button type="button" onClick={() => setAdvancedOpen(!advancedOpen)}
+              className="flex items-center gap-1.5 text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">
+              {advancedOpen ? <ToggleRight size={16} className="text-indigo-400" /> : <ToggleLeft size={16} />}
+              Configurações Avançadas (Healthcheck, etc.)
+            </button>
+            {advancedOpen && (
+              <div className="mt-4 p-4 bg-[#0f1117] border border-[#2a2d3e] rounded-xl space-y-4">
+                <div>
+                  <label className="text-xs text-[#64748b] block mb-1">Healthcheck Command (ex: wget -q -O - http://localhost:8000)</label>
+                  <input value={healthcheck.test} onChange={e => setHealthcheck({ ...healthcheck, test: e.target.value })}
+                    placeholder="CMD curl -f http://localhost/" className={inp} />
+                  <p className="text-[10px] text-[#475569] mt-1">Deixe vazio para desativar o healthcheck personalizado.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-[#64748b] block mb-1">Intervalo (ex: 30s)</label>
+                    <input value={healthcheck.interval} onChange={e => setHealthcheck({ ...healthcheck, interval: e.target.value })}
+                      className={inp} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-[#64748b] block mb-1">Timeout (ex: 10s)</label>
+                    <input value={healthcheck.timeout} onChange={e => setHealthcheck({ ...healthcheck, timeout: e.target.value })}
+                      className={inp} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-[#64748b] block mb-1">Retentativas</label>
+                    <input type="number" value={healthcheck.retries} onChange={e => setHealthcheck({ ...healthcheck, retries: e.target.value })}
+                      className={inp} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-[#64748b] block mb-1">Start Period (ex: 40s)</label>
+                    <input value={healthcheck.start_period} onChange={e => setHealthcheck({ ...healthcheck, start_period: e.target.value })}
+                      className={inp} />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
           {error && <p className="text-xs text-red-400">{error}</p>}
           <button type="submit" disabled={loading}
