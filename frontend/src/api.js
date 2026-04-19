@@ -138,6 +138,10 @@ export const api = {
     info: () => request('/storage/'),
     disks: () => request('/storage/disks'),
     volumes: () => request('/storage/volumes'),
+    mount: (uuid, mountpoint, fstype) =>
+      request('/storage/mount', { method: 'POST', body: JSON.stringify({ uuid, mountpoint, fstype }) }),
+    unmount: (mountpoint) =>
+      request(`/storage/unmount?mountpoint=${encodeURIComponent(mountpoint)}`, { method: 'POST' }),
   },
 
   // Files

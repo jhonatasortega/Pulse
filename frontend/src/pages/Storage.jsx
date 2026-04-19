@@ -131,48 +131,53 @@ function NewFileModal({ currentPath, onClose, onDone }) {
 }
 
 function EditorModal({ entry, onClose, onSaved }) {
-  const [content, setContent] = useState('')
-  const [loading, setLoading] = useState(true)
+    // ... (existing code remains same)
+}
+
+function MountModal({ disk, onClose, onDone }) {
+  const [mountpoint, setMountpoint] = useState(`/mnt/${disk.label || disk.name}`)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
-  useEffect(() => {
-    api.files.read(entry.path)
-      .then(r => { setContent(r.content); setLoading(false) })
-      .catch(e => { setErr(e.message); setLoading(false) })
-  }, [entry.path])
-  async function save() {
+
+  async function mount() {
     setSaving(true)
-    try { await api.files.writeText(entry.path, content); onSaved() }
-    catch (e) { setErr(e.message) }
-    finally { setSaving(false) }
+    try {
+      await api.storage.mount(disk.uuid, mountpoint, disk.fstype)
+      onDone()
+      onClose()
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      setSaving(false)
+    }
   }
+
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl w-full max-w-4xl h-[85vh] flex flex-col">
-        <div className="px-5 py-3 border-b border-[#2a2d3e] flex items-center justify-between flex-shrink-0">
-          <div>
-            <p className="text-sm font-semibold text-white">{entry.name}</p>
-            <p className="text-xs text-[#64748b] font-mono">{entry.path}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={save} disabled={saving || loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#6366f1] text-white text-xs rounded-lg hover:bg-[#4f46e5] disabled:opacity-50">
-              <Save size={12} />{saving ? 'Salvando...' : 'Salvar'}
-            </button>
-            <button onClick={onClose} className="text-[#94a3b8] hover:text-white"><X size={18} /></button>
-          </div>
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl w-full max-w-sm p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-white">Montar Disco</h2>
+        <div className="space-y-1">
+          <p className="text-[10px] text-[#64748b] uppercase font-bold">DISCO</p>
+          <p className="text-xs text-white bg-[#0f1117] p-2 rounded border border-[#2a2d3e]">
+            {disk.label} ({disk.device}) <br/>
+            <span className="text-[#64748b]">{disk.uuid}</span>
+          </p>
         </div>
-        {err && <div className="px-5 py-2 text-xs text-red-400 bg-red-500/10 border-b border-red-500/20 flex-shrink-0">{err}</div>}
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center text-[#64748b]">Carregando...</div>
-        ) : (
-          <textarea
-            value={content}
-            onChange={e => setContent(e.target.value)}
-            className="flex-1 bg-[#0f1117] text-[#94a3b8] font-mono text-xs p-4 resize-none focus:outline-none leading-relaxed"
-            spellCheck={false}
-          />
-        )}
+        <div className="space-y-1">
+          <label className="text-[10px] text-[#64748b] uppercase font-bold">PONTO DE MONTAGEM</label>
+          <input value={mountpoint} onChange={e => setMountpoint(e.target.value)}
+            className="w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2"
+            autoFocus />
+          <p className="text-[10px] text-[#64748b]">Será adicionado ao /etc/fstab para persistência.</p>
+        </div>
+        {err && <p className="text-xs text-red-400">{err}</p>}
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-[#94a3b8] hover:text-white">Cancelar</button>
+          <button onClick={mount} disabled={saving || !mountpoint.trim()}
+            className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 disabled:opacity-50">
+            {saving ? 'Montando...' : 'Confirmar Montagem'}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -499,9 +504,9 @@ export default function Storage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [browsePath, setBrowsePath] = useState(location.state?.browsePath || null)
-  const [clipboard, setClipboard] = useState(null) // lifted so it persists across disk switches
+  const [clipboard, setClipboard] = useState(null)
+  const [mountTarget, setMountTarget] = useState(null)
 
-  // Re-read location.state when navigating to /storage while already on it
   useEffect(() => {
     if (location.state?.browsePath) {
       setBrowsePath(location.state.browsePath)
@@ -517,9 +522,19 @@ export default function Storage() {
 
   useEffect(() => { load() }, [])
 
+  async function handleUnmount(mp) {
+    if (!confirm(`Remover montagem de ${mp}?\n(Isso removerá a entrada do fstab mas não apagará seus dados)`)) return
+    try {
+      await api.storage.unmount(mp)
+      load()
+    } catch (e) {
+      alert(e.message)
+    }
+  }
+
   if (browsePath) {
     return (
-      <div className="p-6 h-full flex flex-col">
+      <div className="p-6 h-full flex flex-col overflow-y-auto">
         <FileBrowser
           key={browsePath}
           initialPath={browsePath}
@@ -532,7 +547,7 @@ export default function Storage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="h-full overflow-y-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-white">Armazenamento</h1>
@@ -554,40 +569,73 @@ export default function Storage() {
           <section>
             <div className="flex items-center gap-2 mb-4">
               <HardDrive size={16} className="text-[#64748b]" />
-              <h2 className="text-sm font-semibold text-white uppercase tracking-wider">Discos</h2>
+              <h2 className="text-sm font-semibold text-white uppercase tracking-wider">Discos Montados</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {data.disks.map((disk, i) => (
                 <div key={i}
-                  onClick={() => setBrowsePath(disk.mountpoint)}
-                  className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5 cursor-pointer hover:border-[#6366f1]/50 hover:bg-[#6366f1]/5 transition-all group">
-                  <div className="flex items-start justify-between mb-1">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-white">{disk.mountpoint}</p>
-                        <span className="text-[10px] text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity">Explorar →</span>
+                  className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5 group flex flex-col relative overflow-hidden">
+                  <div className="flex-1 cursor-pointer" onClick={() => setBrowsePath(disk.mountpoint)}>
+                    <div className="flex items-start justify-between mb-1">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-white">{disk.mountpoint}</p>
+                          <span className="text-[10px] text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity">Explorar →</span>
+                        </div>
+                        <p className="text-xs text-[#64748b]">{disk.device} · {disk.fstype}</p>
                       </div>
-                      <p className="text-xs text-[#64748b]">{disk.device} · {disk.fstype}</p>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                        disk.percent > 85 ? 'bg-red-500/10 text-red-400' :
+                        disk.percent > 70 ? 'bg-yellow-500/10 text-yellow-400' :
+                        'bg-indigo-500/10 text-indigo-400'
+                      }`}>{disk.percent}%</span>
                     </div>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                      disk.percent > 85 ? 'bg-red-500/10 text-red-400' :
-                      disk.percent > 70 ? 'bg-yellow-500/10 text-yellow-400' :
-                      'bg-indigo-500/10 text-indigo-400'
-                    }`}>{disk.percent}%</span>
+                    <Bar percent={disk.percent} />
+                    <div className="flex justify-between mt-3 text-xs text-[#64748b]">
+                      <span>{fmt(disk.used)} usado</span>
+                      <span>{fmt(disk.free)} livre</span>
+                      <span>{fmt(disk.total)} total</span>
+                    </div>
                   </div>
-                  <Bar percent={disk.percent} />
-                  <div className="flex justify-between mt-3 text-xs text-[#64748b]">
-                    <span>{fmt(disk.used)} usado</span>
-                    <span>{fmt(disk.free)} livre</span>
-                    <span>{fmt(disk.total)} total</span>
-                  </div>
+                  {/* Unmount for non-root paths */}
+                  {disk.mountpoint !== '/' && disk.mountpoint !== '/host' && (
+                     <button 
+                       onClick={() => handleUnmount(disk.mountpoint)}
+                       className="absolute top-2 right-2 p-1.5 opacity-0 group-hover:opacity-100 hover:text-red-400 bg-[#0f1117]/80 rounded-lg transition-opacity" title="Desmontar e remover do Pulse">
+                       <Trash2 size={12} />
+                     </button>
+                  )}
                 </div>
               ))}
-              {data.disks.length === 0 && <p className="text-[#64748b] text-sm">Nenhum disco encontrado.</p>}
+              {data.disks.length === 0 && <p className="text-[#64748b] text-sm">Nenhum disco montado.</p>}
             </div>
           </section>
 
-          {/* Volumes */}
+          {/* Available */}
+          {(data.available || []).length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <HardDrive size={16} className="text-indigo-400" />
+              <h2 className="text-sm font-semibold text-white uppercase tracking-wider">Discos Disponíveis (Não Montados)</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {data.available.map((disk, i) => (
+                <div key={i} className="bg-[#1a1d27] border border-dashed border-[#2a2d3e] rounded-xl p-4 flex items-center justify-between">
+                   <div>
+                      <p className="text-sm font-medium text-white">{disk.label || disk.name}</p>
+                      <p className="text-[10px] text-[#64748b] uppercase font-mono">{disk.device} · {disk.size}</p>
+                   </div>
+                   <button 
+                     onClick={() => setMountTarget(disk)}
+                     className="px-3 py-1.5 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white rounded-lg text-xs font-medium transition-all">
+                     Montar
+                   </button>
+                </div>
+              ))}
+            </div>
+          </section>
+          )}
+
           <section>
             <div className="flex items-center gap-2 mb-4">
               <Database size={16} className="text-[#64748b]" />
@@ -626,6 +674,7 @@ export default function Storage() {
           </section>
         </>
       )}
+      {mountTarget && <MountModal disk={mountTarget} onClose={() => setMountTarget(null)} onDone={load} />}
     </div>
   )
 }

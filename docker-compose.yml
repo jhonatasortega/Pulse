@@ -40,7 +40,7 @@ services:
       - PULSE_DATA_DIR=/app/data
       # Set a strong key to enable authentication. Leave empty to disable (dev mode).
       - PULSE_API_KEY=${PULSE_API_KEY:-}
-    pid: host
+    privileged: true
     restart: unless-stopped
     labels:
       - pulse.managed=false
