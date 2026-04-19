@@ -103,9 +103,42 @@ def get_installed(app_id: str):
 
 
 @router.post("/install/{app_id}")
-def install_app(app_id: str, req: InstallRequest):
+def install_app(app_id: str, req: InstallRequest, background_tasks: BackgroundTasks):
     try:
-        return app_service.install_app(app_id, req.env_overrides)
+        # Register app state immediately so Dashboard can show it
+        template = app_service.get_template(app_id)
+        if not template:
+             # Try store
+            from services import store_service
+            store_apps = {a["id"]: a for a in store_service.fetch_store_apps()}
+            template = store_apps.get(app_id)
+
+        if not template:
+            raise HTTPException(404, f"Template '{app_id}' not found")
+
+        state = {
+            "id": app_id,
+            "name": template["name"],
+            "version": template.get("version", "latest"),
+            "status": "installing",
+            "icon_url": template.get("icon_url", ""),
+            "template": template,
+            "env_overrides": req.env_overrides or {},
+        }
+        app_service.save_app_state(app_id, state)
+
+        def _do_install():
+            try:
+                # Reuse the existing app_service.install_app but without saving state again if possible
+                # Actually, let's just let it run. It will overwrite the "installing" state with the final one.
+                app_service.install_app(app_id, req.env_overrides, template_override=template)
+            except Exception as e:
+                state["status"] = "error"
+                state["error"] = str(e)
+                app_service.save_app_state(app_id, state)
+
+        background_tasks.add_task(_do_install)
+        return state
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
@@ -167,8 +200,8 @@ def update_app(app_id: str):
 
 
 @router.post("/custom-install")
-def custom_install(req: CustomInstallRequest):
-    """Install any Docker image with full configuration (CasaOS-style)."""
+def custom_install(req: CustomInstallRequest, background_tasks: BackgroundTasks):
+    """Install any Docker image with full configuration (background)."""
 
     def duration_to_ns(d: str) -> int:
         if not d: return 0
@@ -195,7 +228,16 @@ def custom_install(req: CustomInstallRequest):
     volumes = {}
     for v in req.volumes:
         if v.host and v.container:
-            volumes[v.host] = {"bind": v.container, "mode": v.mode}
+            # Fix relative paths (re-use logic from app_service)
+            host_path = v.host
+            if host_path.startswith("./"):
+                from services.app_service import DATA_DIR
+                # Create app-specific folder
+                host_path = v.host.replace("./", f"{DATA_DIR}/{req.name}/")
+
+            # Ensure local folder exists
+            os.makedirs(host_path, exist_ok=True)
+            volumes[host_path] = {"bind": v.container, "mode": v.mode}
 
     environment = {e.key: e.value for e in req.env if e.key.strip()}
 
@@ -230,8 +272,35 @@ def custom_install(req: CustomInstallRequest):
         config["network"] = req.network
 
     try:
-        docker_service.pull_image(full_image)
-        return docker_service.run_container(config)
+        # Register app state immediately so Dashboard can show it
+        app_id = f"custom_{req.name}"
+        state = {
+            "id": app_id,
+            "name": req.name,
+            "version": req.tag,
+            "container_name": req.name,
+            "status": "installing",
+            "icon_url": req.icon_url,
+            "is_custom": True,
+            "config": config,
+        }
+        app_service.save_app_state(app_id, state)
+
+        # Run installation in background
+        def _do_install():
+            try:
+                docker_service.pull_image(full_image)
+                container = docker_service.run_container(config)
+                state["status"] = container["status"]
+                state["container_id"] = container["full_id"]
+                app_service.save_app_state(app_id, state)
+            except Exception as e:
+                state["status"] = "error"
+                state["error"] = str(e)
+                app_service.save_app_state(app_id, state)
+
+        background_tasks.add_task(_do_install)
+        return state
     except Exception as e:
         raise HTTPException(500, str(e))
 

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, metricsSocket } from '../api'
 import { memCache, bust } from '../cache'
 import { auth } from '../auth'
-import { Play, Square, RotateCw, ExternalLink, X, Image, Upload, HardDrive, Layers, LayoutList, Eye, EyeOff, SlidersHorizontal, Check } from 'lucide-react'
+import { Play, Square, RotateCw, ExternalLink, X, Image, Upload, HardDrive, Layers, LayoutList, Eye, EyeOff, SlidersHorizontal, Check, Loader2, AlertCircle } from 'lucide-react'
 
 function greeting() {
   const h = new Date().getHours()
@@ -250,7 +250,41 @@ function WallpaperPanel({ onClose }) {
 }
 
 // ─── group tile ───────────────────────────────────────────────────────────────
-function GroupTile({ group, onStart, onStop, onRestart, busy }) {
+function InstallingTile({ item, hasWallpaper }) {
+  const isErr = item.status === 'error'
+  return (
+    <div className={`relative border rounded-2xl p-4 flex flex-col items-center justify-center gap-3 w-[120px] h-[148px] flex-shrink-0 animate-pulse ${hasWallpaper ? 'bg-black/30 backdrop-blur-md border-indigo-400/30' : 'bg-[#1a1d27] border-[#2a2d3e]'}`}>
+      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#2a2d3e] to-[#1a1d27] flex items-center justify-center text-3xl shadow-inner relative">
+        {item.icon_url ? (
+          <img src={item.icon_url} alt="" className="w-10 h-10 object-contain rounded-xl opacity-50" />
+        ) : (
+          <span className="opacity-50">{groupIcon(item.name)}</span>
+        )}
+        <div className="absolute inset-0 flex items-center justify-center">
+          {isErr ? <AlertCircle size={24} className="text-red-400" /> : <Loader2 size={24} className="text-indigo-400 animate-spin" />}
+        </div>
+      </div>
+      <div className="text-center px-1">
+        <p className="text-xs font-semibold text-white truncate w-full">{item.display_name || item.name}</p>
+        <p className={`text-[10px] mt-1 font-bold ${isErr ? 'text-red-400' : 'text-indigo-400'}`}>
+          {isErr ? 'ERRO' : 'BAIXANDO...'}
+        </p>
+      </div>
+      {!isErr && (
+        <div className="w-full bg-white/10 rounded-full h-1 overflow-hidden mt-1">
+          <div className="h-full bg-indigo-500 animate-[loading_1.5s_ease-in-out_infinite]" style={{ width: '40%' }} />
+        </div>
+      )}
+      {isErr && (
+         <button onClick={() => alert(item.error)} className="text-[9px] text-red-400/70 hover:underline">Ver erro</button>
+      )}
+    </div>
+  )
+}
+
+
+function GroupTile({ group, onStart, onStop, onRestart, busy, hasWallpaper }) {
+  if (group.is_pending) return <InstallingTile item={group} hasWallpaper={hasWallpaper} />
   const running = group.status === 'running'
   const partial = group.status === 'partial'
   const navigate = useNavigate()
@@ -328,7 +362,8 @@ function GroupTile({ group, onStart, onStop, onRestart, busy }) {
 }
 
 // ─── container tile (ungrouped mode) ──────────────────────────────────────────
-function ContainerTile({ container, projectName, onStart, onStop, onRestart, busy }) {
+function ContainerTile({ container, projectName, onStart, onStop, onRestart, busy, hasWallpaper }) {
+  if (container.is_pending) return <InstallingTile item={container} hasWallpaper={hasWallpaper} />
   const running = container.status === 'running'
   const navigate = useNavigate()
 
@@ -630,6 +665,14 @@ export default function Dashboard() {
           </div>
         </div>
 
+        <style>{`
+          @keyframes loading {
+            0% { transform: translateX(-100%); }
+            50% { transform: translateX(0%); }
+            100% { transform: translateX(100%); }
+          }
+        `}</style>
+
         {/* Widgets */}
         {metrics && (
           <div className="flex justify-center gap-4 flex-wrap">
@@ -698,7 +741,7 @@ export default function Dashboard() {
 
           {/* ─── GROUPED VIEW ─── */}
           {viewMode === 'grouped' && runningGroups.map(g => (
-            <GroupTile key={g.id} group={g} busy={busy[g.id]}
+            <GroupTile key={g.id} group={g} busy={busy[g.id]} hasWallpaper={hasWallpaper}
               onStart={id => groupAction(id, () => api.groups.start(id))}
               onStop={id => groupAction(id, () => api.groups.stop(id))}
               onRestart={id => groupAction(id, () => api.groups.restart(id))}
@@ -707,7 +750,7 @@ export default function Dashboard() {
 
           {/* ─── UNGROUPED VIEW ─── */}
           {viewMode === 'ungrouped' && runningContainers.map(c => (
-            <ContainerTile key={c.id} container={c} projectName={c.projectName} busy={busy[c.id]}
+            <ContainerTile key={c.id} container={c} projectName={c.projectName} busy={busy[c.id]} hasWallpaper={hasWallpaper}
               onStart={id => containerAction(id, () => api.containers.start(id))}
               onStop={id => containerAction(id, () => api.containers.stop(id))}
               onRestart={id => containerAction(id, () => api.containers.restart(id))}
@@ -727,7 +770,7 @@ export default function Dashboard() {
             <p className="text-xs text-[#64748b]/80 uppercase tracking-wider mb-3 font-medium drop-shadow">Parados</p>
             <div className="flex flex-wrap gap-3">
               {stoppedGroups.map(g => (
-                <GroupTile key={g.id} group={g} busy={busy[g.id]}
+                <GroupTile key={g.id} group={g} busy={busy[g.id]} hasWallpaper={hasWallpaper}
                   onStart={id => groupAction(id, () => api.groups.start(id))}
                   onStop={id => groupAction(id, () => api.groups.stop(id))}
                   onRestart={id => groupAction(id, () => api.groups.restart(id))}
@@ -742,7 +785,7 @@ export default function Dashboard() {
             <p className="text-xs text-[#64748b]/80 uppercase tracking-wider mb-3 font-medium drop-shadow">Parados</p>
             <div className="flex flex-wrap gap-3">
               {stoppedContainers.map(c => (
-                <ContainerTile key={c.id} container={c} projectName={c.projectName} busy={busy[c.id]}
+                <ContainerTile key={c.id} container={c} projectName={c.projectName} busy={busy[c.id]} hasWallpaper={hasWallpaper}
                   onStart={id => containerAction(id, () => api.containers.start(id))}
                   onStop={id => containerAction(id, () => api.containers.stop(id))}
                   onRestart={id => containerAction(id, () => api.containers.restart(id))}

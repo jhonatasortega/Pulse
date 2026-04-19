@@ -63,7 +63,46 @@ def _group_containers(containers: list) -> list:
 
 def list_groups() -> list:
     containers = docker_service.list_containers(all=True)
-    return _group_containers(containers)
+    groups = _group_containers(containers)
+
+    # Add apps that are in "installing" or "error" state but don't have a container yet
+    from . import app_service
+    installed_apps = app_service.get_installed_apps()
+
+    # Track container IDs and names already grouped
+    grouped_container_ids = set()
+    grouped_names = {g["name"] for g in groups}
+    for g in groups:
+        for c in g["containers"]:
+            grouped_container_ids.add(c["id"])
+            grouped_container_ids.add(c["full_id"])
+
+    for app in installed_apps:
+        app_id = app["id"]
+        status = app.get("status")
+
+        # Only add if it's in a transitional state or hasn't been grouped yet
+        # We check both name and container_id to avoid duplicates
+        if status in ("installing", "error"):
+            # If there's already a container for it, it might still have 'installing' status
+            # but we should check if we already have it.
+            if app.get("name") in grouped_names or app.get("container_id") in grouped_container_ids:
+                continue
+
+            groups.append({
+                "id": f"app_{app_id}",
+                "name": app.get("container_name") or app["name"],
+                "display_name": app["name"],
+                "status": status,
+                "icon_url": app.get("icon_url", ""),
+                "source": "app",
+                "containers": [], # No containers yet
+                "ports": {},
+                "is_pending": True,
+                "error": app.get("error")
+            })
+
+    return groups
 
 
 def group_action(project: str, action: str) -> dict:

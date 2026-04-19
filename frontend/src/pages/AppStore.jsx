@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { memCache, bust } from '../cache'
 import {
@@ -84,6 +85,7 @@ function templateToComposeYaml(template) {
 
 // ─── install modal (template-based) ──────────────────────────────────────────
 function InstallModal({ template, onClose, onDone }) {
+  const navigate = useNavigate()
   const [mode, setMode]       = useState('form') // 'form' | 'compose'
   const [fields, setFields]   = useState(() => {
     const init = {}
@@ -99,9 +101,8 @@ function InstallModal({ template, onClose, onDone }) {
 
   async function submitForm(e) {
     e.preventDefault(); setLoading(true); setError('')
-    try { await api.apps.install(template.id, fields); onDone() }
-    catch (err) { setError(err.message) }
-    finally { setLoading(false) }
+    try { await api.apps.install(template.id, fields); onDone(); navigate('/') }
+    catch (err) { setError(err.message); setLoading(false) }
   }
 
   async function submitCompose(e) {
@@ -122,9 +123,8 @@ function InstallModal({ template, onClose, onDone }) {
         volumes: parsed.volumes.map(v => ({ host: v.host, container: v.container, mode: 'rw' })),
         env:     parsed.env.map(ev => ({ key: ev.key, value: ev.value })),
       })
-      onDone()
-    } catch (err) { setError(err.message) }
-    finally { setLoading(false) }
+      onDone(); navigate('/')
+    } catch (err) { setError(err.message); setLoading(false) }
   }
 
   return (
@@ -407,6 +407,7 @@ function parseCompose(text) {
 }
 
 function ManualInstallModal({ onClose, onDone }) {
+  const navigate = useNavigate()
   const [tab, setTab] = useState('form') // 'form' | 'compose'
   const [composeText, setComposeText] = useState('')
   const [form, setForm] = useState({
@@ -472,9 +473,8 @@ function ManualInstallModal({ onClose, onDone }) {
           start_period: healthcheck.start_period,
         } : null
       })
-      onDone(); onClose()
-    } catch (err) { setError(err.message) }
-    finally { setLoading(false) }
+      onDone(); navigate('/')
+    } catch (err) { setError(err.message); setLoading(false) }
   }
 
   const inp = "w-full bg-[#0f1117] border border-[#2a2d3e] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-[#6366f1]"
