@@ -199,6 +199,9 @@ def run_container(config: dict) -> dict:
     if config.get("labels"):
         run_kwargs["labels"] = config["labels"]
 
+    if config.get("hostname"):
+        run_kwargs["hostname"] = config["hostname"]
+
     container = client.containers.run(**run_kwargs)
     container.reload()
     return serialize_container(container)

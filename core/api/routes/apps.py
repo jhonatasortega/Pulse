@@ -43,6 +43,7 @@ class CustomInstallRequest(BaseModel):
     restart: str = "unless-stopped"
     webui_port: str = ""
     webui_path: str = "/"
+    hostname: Optional[str] = None
 
 
 @router.get("/templates")
@@ -192,6 +193,7 @@ def custom_install(req: CustomInstallRequest):
         "environment": environment,
         "restart": req.restart,
         "labels": labels,
+        "hostname": req.hostname,
     }
     if req.network and req.network != "bridge":
         config["network"] = req.network

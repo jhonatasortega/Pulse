@@ -310,65 +310,78 @@ function ListField({ label, items, onChange, fields, placeholders }) {
 
 // ─── docker-compose parser (basic) ────────────────────────────────────────────
 function parseCompose(text) {
-  const result = { image: '', tag: 'latest', name: '', ports: [], volumes: [], env: [], network: 'bridge', restart: 'unless-stopped' }
+  const result = { image: '', tag: 'latest', name: '', hostname: '', ports: [], volumes: [], env: [], network: 'bridge', restart: 'unless-stopped' }
   if (!text) return result
 
-  // image: image:tag
-  const imgMatch = text.match(/^\s*image:\s*([^\s#\n]+)/m)
-  if (imgMatch) {
-    const full = imgMatch[1].trim()
-    const colonIdx = full.lastIndexOf(':')
-    if (colonIdx > 0 && !full.includes('/') || (colonIdx > full.lastIndexOf('/'))) {
-      result.image = full.substring(0, colonIdx)
-      result.tag   = full.substring(colonIdx + 1)
-    } else {
-      result.image = full
+  const lines = text.split('\n')
+  let currentSection = null
+  let sectionIndent = -1
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (!line.trim() || line.trim().startsWith('#')) continue
+
+    const indent = line.search(/\S/)
+    const trimmed = line.trim()
+
+    // If we were in a section, check if it ended
+    if (currentSection && indent <= sectionIndent && trimmed.includes(':')) {
+      currentSection = null
+      sectionIndent = -1
     }
-  }
 
-  // container_name
-  const nameMatch = text.match(/^\s*container_name:\s*([^\s#\n]+)/m)
-  if (nameMatch) result.name = nameMatch[1].trim()
+    // Identify top-level keys within a service (this is basic and assumes first service usually)
+    if (!currentSection) {
+      if (trimmed.startsWith('image:')) {
+        const full = trimmed.replace('image:', '').trim().replace(/["']/g, '')
+        const colonIdx = full.lastIndexOf(':')
+        if (colonIdx > 0 && (!full.includes('/') || colonIdx > full.lastIndexOf('/'))) {
+          result.image = full.substring(0, colonIdx)
+          result.tag   = full.substring(colonIdx + 1)
+        } else {
+          result.image = full
+        }
+      } else if (trimmed.startsWith('container_name:')) {
+        result.name = trimmed.replace('container_name:', '').trim().replace(/["']/g, '')
+      } else if (trimmed.startsWith('hostname:')) {
+        result.hostname = trimmed.replace('hostname:', '').trim().replace(/["']/g, '')
+      } else if (trimmed.startsWith('restart:')) {
+        result.restart = trimmed.replace('restart:', '').trim().replace(/["']/g, '')
+      } else if (trimmed.startsWith('network_mode: host')) {
+        result.network = 'host'
+      } else if (trimmed === 'ports:') {
+        currentSection = 'ports'
+        sectionIndent = indent
+      } else if (trimmed === 'volumes:') {
+        currentSection = 'volumes'
+        sectionIndent = indent
+      } else if (trimmed === 'environment:') {
+        currentSection = 'environment'
+        sectionIndent = indent
+      }
+      continue
+    }
 
-  // restart
-  const restartMatch = text.match(/^\s*restart:\s*([^\s#\n]+)/m)
-  if (restartMatch) result.restart = restartMatch[1].trim()
-
-  // network_mode: host
-  if (/network_mode:\s*host/.test(text)) result.network = 'host'
-
-  // ports: - "8080:80" or - 8080:80
-  const portsSection = text.match(/^\s*ports:\s*\n((?:\s+-[^\n]+\n?)*)/m)
-  if (portsSection) {
-    const lines = portsSection[1].split('\n')
-    lines.forEach(l => {
-      const m = l.match(/-\s*["']?(\d+):(\d+)["']?/)
-      if (m) result.ports.push({ host: m[1], container: m[2], protocol: 'tcp' })
-    })
-  }
-
-  // volumes: - /host:/container
-  const volSection = text.match(/^\s*volumes:\s*\n((?:\s+-[^\n]+\n?)*)/m)
-  if (volSection) {
-    const lines = volSection[1].split('\n')
-    lines.forEach(l => {
-      const m = l.match(/-\s*["']?([^:'"]+):([^:'"#\s]+)["']?/)
-      if (m && m[1] && m[2]) result.volumes.push({ host: m[1].trim(), container: m[2].trim() })
-    })
-  }
-
-  // environment: - KEY=VALUE  or  KEY: VALUE
-  const envSection = text.match(/^\s*environment:\s*\n((?:\s+[^\n]+\n?)*)/m)
-  if (envSection) {
-    const lines = envSection[1].split('\n')
-    lines.forEach(l => {
-      // list form: - KEY=VALUE
-      let m = l.match(/-\s*([\w]+)=(.*)/)
-      if (m) { result.env.push({ key: m[1].trim(), value: m[2].trim() }); return }
-      // map form: KEY: VALUE
-      m = l.match(/^\s+([\w]+):\s*(.*)/)
-      if (m && m[1] !== 'image' && m[1] !== 'restart') result.env.push({ key: m[1].trim(), value: m[2].trim() })
-    })
+    // Inside a section
+    if (currentSection === 'ports') {
+      const resp = trimmed.match(/^-\s*["']?(\d+):(\d+)["']?/)
+      if (resp) result.ports.push({ host: resp[1], container: resp[2], protocol: 'tcp' })
+    } else if (currentSection === 'volumes') {
+      const resv = trimmed.match(/^-\s*["']?([^:'"]+):([^:'"#\s]+)["']?/)
+      if (resv) result.volumes.push({ host: resv[1].trim(), container: resv[2].trim() })
+    } else if (currentSection === 'environment') {
+      // list form: - KEY=VAL
+      const ml = trimmed.match(/^-\s*([\w.-]+)=(.*)/)
+      if (ml) {
+        result.env.push({ key: ml[1].trim(), value: ml[2].trim().replace(/^["']|["']$/g, '') })
+      } else {
+        // map form: KEY: VAL
+        const mm = trimmed.match(/^([\w.-]+):\s*(.*)/)
+        if (mm && !['image', 'ports', 'volumes', 'environment', 'restart', 'networks', 'healthcheck', 'hostname', 'container_name'].includes(mm[1])) {
+          result.env.push({ key: mm[1].trim(), value: mm[2].trim().replace(/^["']|["']$/g, '') })
+        }
+      }
+    }
   }
 
   return result
@@ -378,7 +391,7 @@ function ManualInstallModal({ onClose, onDone }) {
   const [tab, setTab] = useState('form') // 'form' | 'compose'
   const [composeText, setComposeText] = useState('')
   const [form, setForm] = useState({
-    image: '', tag: 'latest', name: '', icon_url: '',
+    image: '', tag: 'latest', name: '', hostname: '', icon_url: '',
     network: 'bridge', restart: 'unless-stopped',
     webui_port: '', webui_path: '/',
   })
@@ -395,11 +408,12 @@ function ManualInstallModal({ onClose, onDone }) {
     const parsed = parseCompose(composeText)
     setForm(f => ({
       ...f,
-      image:   parsed.image   || f.image,
-      tag:     parsed.tag     || f.tag,
-      name:    parsed.name    || f.name,
-      network: parsed.network || f.network,
-      restart: parsed.restart || f.restart,
+      image:     parsed.image   || f.image,
+      tag:       parsed.tag     || f.tag,
+      name:      parsed.name    || f.name,
+      hostname:  parsed.hostname || f.hostname,
+      network:   parsed.network || f.network,
+      restart:   parsed.restart || f.restart,
     }))
     if (parsed.ports.length)   setPorts(parsed.ports)
     if (parsed.volumes.length) setVolumes(parsed.volumes)
@@ -466,12 +480,17 @@ function ManualInstallModal({ onClose, onDone }) {
             </div>
           </div>
 
-          {/* Name + icon */}
+          {/* Name + hostname + icon */}
           <div className="flex gap-3 items-end">
-            <div className="flex-1">
+            <div className="flex-[2]">
               <label className="text-xs text-[#64748b] block mb-1">Nome do App *</label>
               <input value={form.name} onChange={e => setF('name', e.target.value)}
                 placeholder="meu-app" className={inp} />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs text-[#64748b] block mb-1">Hostname</label>
+              <input value={form.hostname} onChange={e => setF('hostname', e.target.value)}
+                placeholder="coolify" className={inp} />
             </div>
             <div className="flex items-center gap-2">
               {form.icon_url && !iconErr && (
