@@ -415,9 +415,9 @@ function VisibilityPanel({ onClose, groups, hidden, setHidden }) {
     })
   })
 
-  function toggle(id) {
+  function toggle(name) {
     setHidden(prev => {
-      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+      const next = prev.includes(name) ? prev.filter(x => x !== name) : [...prev, name]
       localStorage.setItem('pulse_dash_hidden', JSON.stringify(next))
       return next
     })
@@ -429,9 +429,9 @@ function VisibilityPanel({ onClose, groups, hidden, setHidden }) {
   }
 
   function hideAll() {
-    const ids = allItems.map(i => i.id)
-    setHidden(ids)
-    localStorage.setItem('pulse_dash_hidden', JSON.stringify(ids))
+    const names = allItems.map(i => i.name)
+    setHidden(names)
+    localStorage.setItem('pulse_dash_hidden', JSON.stringify(names))
   }
 
   return (
@@ -451,9 +451,9 @@ function VisibilityPanel({ onClose, groups, hidden, setHidden }) {
 
       <div className="p-2 max-h-[320px] overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: '#2a2d3e transparent' }}>
         {allItems.map(item => {
-          const isHidden = hidden.includes(item.id)
+          const isHidden = hidden.includes(item.name)
           return (
-            <button key={item.id} onClick={() => toggle(item.id)}
+            <button key={item.id} onClick={() => toggle(item.name)}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-all ${
                 isHidden ? 'opacity-40 hover:opacity-70' : 'hover:bg-white/5'
               }`}>
@@ -572,13 +572,13 @@ export default function Dashboard() {
       })
     })
   })
-  const visibleContainers = allContainers.filter(c => !hidden.includes(c.id))
+  const visibleContainers = allContainers.filter(c => !hidden.includes(c.name))
   const runningContainers = visibleContainers.filter(c => c.status === 'running')
   const stoppedContainers = visibleContainers.filter(c => c.status !== 'running')
 
   // ─── Grouped mode filters (also apply hidden) ──────────
   const filteredGroups = groups.map(g => {
-    const visibleCs = g.containers.filter(c => !hidden.includes(c.id))
+    const visibleCs = g.containers.filter(c => !hidden.includes(c.name))
     if (visibleCs.length === 0) return null
     return { ...g, containers: visibleCs }
   }).filter(Boolean)
@@ -609,11 +609,15 @@ export default function Dashboard() {
                 className={`p-2 rounded-xl transition-colors ${filterOpen ? 'bg-[#6366f1] text-white' : 'bg-black/20 backdrop-blur-sm text-[#94a3b8] hover:text-white'}`}
                 title="Filtrar itens">
                 <SlidersHorizontal size={16} />
-                {hidden.length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold">
-                    {hidden.length}
-                  </span>
-                )}
+                {(() => {
+                  const actualHiddenCount = allContainers.filter(c => hidden.includes(c.name)).length
+                  if (actualHiddenCount === 0) return null
+                  return (
+                    <span className="absolute -top-1.5 -right-1.5 h-4 min-w-[16px] px-1 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-[9px] text-white/90 flex items-center justify-center font-bold shadow-lg">
+                      {actualHiddenCount}
+                    </span>
+                  )
+                })()}
               </button>
               {filterOpen && <VisibilityPanel onClose={() => setFilterOpen(false)} groups={groups} hidden={hidden} setHidden={setHidden} />}
             </div>
