@@ -236,8 +236,9 @@ def custom_install(req: CustomInstallRequest, background_tasks: BackgroundTasks)
                 # Create app-specific folder
                 host_path = v.host.replace("./", f"{DATA_DIR}/{req.name}/")
 
-            # Ensure local folder exists
-            os.makedirs(host_path, exist_ok=True)
+            # Ensure local folder exists (only if it doesn't exist already)
+            if not os.path.exists(host_path):
+                os.makedirs(host_path, exist_ok=True)
             volumes[host_path] = {"bind": v.container, "mode": v.mode}
 
     environment = {e.key: e.value for e in req.env if e.key.strip()}
