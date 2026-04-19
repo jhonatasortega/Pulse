@@ -47,7 +47,7 @@ function StorageModal({ onClose }) {
   useEffect(() => {
     api.storage.info()
       .then(d => setDisks(d.disks || []))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false))
   }, [])
 
@@ -83,16 +83,14 @@ function StorageModal({ onClose }) {
                   </div>
                   <p className="text-xs text-[#64748b]">{disk.device} · {disk.fstype}</p>
                 </div>
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                  disk.percent > 85 ? 'bg-red-500/10 text-red-400' :
-                  disk.percent > 70 ? 'bg-yellow-500/10 text-yellow-400' :
-                  'bg-indigo-500/10 text-indigo-400'
-                }`}>{disk.percent}%</span>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${disk.percent > 85 ? 'bg-red-500/10 text-red-400' :
+                    disk.percent > 70 ? 'bg-yellow-500/10 text-yellow-400' :
+                      'bg-indigo-500/10 text-indigo-400'
+                  }`}>{disk.percent}%</span>
               </div>
               <div className="w-full bg-[#2a2d3e] rounded-full h-1.5 mt-2">
-                <div className={`h-1.5 rounded-full transition-all ${
-                  disk.percent > 85 ? 'bg-red-500' : disk.percent > 70 ? 'bg-yellow-500' : 'bg-indigo-500'
-                }`} style={{ width: `${Math.min(disk.percent, 100)}%` }} />
+                <div className={`h-1.5 rounded-full transition-all ${disk.percent > 85 ? 'bg-red-500' : disk.percent > 70 ? 'bg-yellow-500' : 'bg-indigo-500'
+                  }`} style={{ width: `${Math.min(disk.percent, 100)}%` }} />
               </div>
               <div className="flex justify-between mt-2 text-xs text-[#64748b]">
                 <span>{fmt(disk.used)} usado</span>
@@ -109,12 +107,12 @@ function StorageModal({ onClose }) {
 
 // ─── wallpaper settings panel ─────────────────────────────────────────────────
 const GRADIENT_PRESETS = [
-  { label: 'Padrão',      value: '' },
+  { label: 'Padrão', value: '' },
   { label: 'Azul escuro', value: 'linear-gradient(135deg,#0f0c29,#302b63,#24243e)' },
-  { label: 'Índigo',      value: 'linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)' },
-  { label: 'Verde',       value: 'linear-gradient(135deg,#0a3d0a,#1a4a1a,#0f2a0f)' },
-  { label: 'Roxo',        value: 'linear-gradient(135deg,#2d1b69,#1a0a3e,#0f0520)' },
-  { label: 'Crepúsculo',  value: 'linear-gradient(135deg,#1a0533,#2d0d43,#0a1628)' },
+  { label: 'Índigo', value: 'linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)' },
+  { label: 'Verde', value: 'linear-gradient(135deg,#0a3d0a,#1a4a1a,#0f2a0f)' },
+  { label: 'Roxo', value: 'linear-gradient(135deg,#2d1b69,#1a0a3e,#0f0520)' },
+  { label: 'Crepúsculo', value: 'linear-gradient(135deg,#1a0533,#2d0d43,#0a1628)' },
 ]
 
 const IMAGE_PRESETS = [
@@ -137,10 +135,10 @@ const IMAGE_PRESETS = [
 ]
 
 function WallpaperPanel({ onClose }) {
-  const [url, setUrl]           = useState(localStorage.getItem('pulse_wallpaper_url') || '')
-  const [preset, setPreset]     = useState(localStorage.getItem('pulse_wallpaper_preset') || '')
+  const [url, setUrl] = useState(localStorage.getItem('pulse_wallpaper_url') || '')
+  const [preset, setPreset] = useState(localStorage.getItem('pulse_wallpaper_preset') || '')
   const [nickName, setNickName] = useState(localStorage.getItem('pulse_display_name') || '')
-  const fileRef                 = useRef(null)
+  const fileRef = useRef(null)
 
   function apply() {
     localStorage.setItem('pulse_wallpaper_url', url)
@@ -155,7 +153,7 @@ function WallpaperPanel({ onClose }) {
         display_name: nickName.trim(),
         wallpaper_url: url.startsWith('data:') ? '' : url,
         wallpaper_preset: preset,
-      }).catch(() => {})
+      }).catch(() => { })
     }
     onClose()
   }
@@ -263,7 +261,7 @@ function GroupTile({ group, onStart, onStop, onRestart, busy }) {
   const statusColor = running
     ? 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]'
     : partial ? 'bg-yellow-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]'
-    : 'bg-[#475569]'
+      : 'bg-[#475569]'
 
   const borderColor = running || partial
     ? 'border-[#2a2d3e] hover:border-[#6366f1]/40'
@@ -279,14 +277,14 @@ function GroupTile({ group, onStart, onStop, onRestart, busy }) {
           onClick={e => e.stopPropagation()}
           className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#2a2d3e] to-[#1a1d27] flex items-center justify-center text-3xl shadow-inner hover:from-[#6366f1]/20 hover:scale-105 transition-all overflow-hidden">
           {group.icon_url
-            ? <img src={group.icon_url} alt={group.display_name} className="w-10 h-10 object-contain rounded-xl" onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex' }} />
+            ? <img src={group.icon_url} alt={group.display_name} className="w-10 h-10 object-contain rounded-xl" onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex' }} />
             : null}
           <span style={{ display: group.icon_url ? 'none' : 'flex' }}>{groupIcon(group.display_name || group.name)}</span>
         </a>
       ) : (
         <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#2a2d3e] to-[#1a1d27] flex items-center justify-center text-3xl shadow-inner overflow-hidden">
           {group.icon_url
-            ? <img src={group.icon_url} alt={group.display_name} className="w-10 h-10 object-contain rounded-xl" onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex' }} />
+            ? <img src={group.icon_url} alt={group.display_name} className="w-10 h-10 object-contain rounded-xl" onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex' }} />
             : null}
           <span style={{ display: group.icon_url ? 'none' : 'flex' }}>{groupIcon(group.display_name || group.name)}</span>
         </div>
@@ -454,12 +452,10 @@ function VisibilityPanel({ onClose, groups, hidden, setHidden }) {
           const isHidden = hidden.includes(item.name)
           return (
             <button key={item.id} onClick={() => toggle(item.name)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-all ${
-                isHidden ? 'opacity-40 hover:opacity-70' : 'hover:bg-white/5'
-              }`}>
-              <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 transition-all ${
-                isHidden ? 'bg-[#2a2d3e] border border-[#475569]' : 'bg-indigo-500 border border-indigo-400'
-              }`}>
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-all ${isHidden ? 'opacity-40 hover:opacity-70' : 'hover:bg-white/5'
+                }`}>
+              <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 transition-all ${isHidden ? 'bg-[#2a2d3e] border border-[#475569]' : 'bg-indigo-500 border border-indigo-400'
+                }`}>
                 {!isHidden && <Check size={10} className="text-white" />}
               </div>
               <div className="flex-1 min-w-0">

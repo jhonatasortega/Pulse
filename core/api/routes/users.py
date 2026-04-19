@@ -52,6 +52,8 @@ class PreferencesRequest(BaseModel):
     display_name: str = ""
     wallpaper_url: str = ""
     wallpaper_preset: str = ""
+    dash_hidden: list[str] = []
+    dash_view: str = "grouped"
 
 
 @router.get("/me/preferences")
