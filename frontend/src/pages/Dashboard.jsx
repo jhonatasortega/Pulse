@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, metricsSocket } from '../api'
 import { memCache, bust } from '../cache'
 import { auth } from '../auth'
-import { Play, Square, RotateCw, ExternalLink, X, Image, Upload, HardDrive } from 'lucide-react'
+import { Play, Square, RotateCw, ExternalLink, X, Image, Upload, HardDrive, Layers, LayoutList, Eye, EyeOff, SlidersHorizontal, Check } from 'lucide-react'
 
 function greeting() {
   const h = new Date().getHours()
@@ -28,7 +28,7 @@ const iconMap = {
   emulatorjs: '🕹️', redis: '🗃️', postgres: '🗄️', mysql: '🗄️',
   'home-assistant': '🏠', homeassistant: '🏠', grafana: '📊',
   tailscale: '🔒', pihole: '🚫', vaultwarden: '🔑', bitwarden: '🔑',
-  gitea: '🐙', wireguard: '🛡️', nginx: '🌐', caddy: '🌐',
+  gitea: '🐙', wireguard: '🛡️', caddy: '🌐',
   syncthing: '🔄', immich: '📷', audiobookshelf: '🎧',
 }
 
@@ -329,6 +329,152 @@ function GroupTile({ group, onStart, onStop, onRestart, busy }) {
   )
 }
 
+// ─── container tile (ungrouped mode) ──────────────────────────────────────────
+function ContainerTile({ container, projectName, onStart, onStop, onRestart, busy }) {
+  const running = container.status === 'running'
+  const navigate = useNavigate()
+
+  const portEntry = Object.entries(container.ports || {})[0]
+  const hostPort = portEntry ? portEntry[1]?.[0] : null
+
+  const statusColor = running
+    ? 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]'
+    : 'bg-[#475569]'
+
+  const borderColor = running
+    ? 'border-[#2a2d3e] hover:border-[#6366f1]/40'
+    : 'border-[#2a2d3e]/50 opacity-60'
+
+  const displayName = container.labels?.['pulse.display_name'] || container.name.replace(/^pulse_/, '').replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+
+  return (
+    <div className={`group relative bg-[#1a1d27]/80 backdrop-blur-sm border rounded-2xl p-4 flex flex-col items-center gap-2 transition-all w-[120px] h-[148px] flex-shrink-0 ${borderColor}`}>
+      <div className={`absolute top-3 right-3 w-2 h-2 rounded-full ${statusColor}`} />
+
+      {hostPort && running ? (
+        <a href={`http://${location.hostname}:${hostPort}`} target="_blank" rel="noreferrer"
+          onClick={e => e.stopPropagation()}
+          className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#2a2d3e] to-[#1a1d27] flex items-center justify-center text-2xl shadow-inner hover:from-[#6366f1]/20 hover:scale-105 transition-all">
+          {groupIcon(container.name)}
+        </a>
+      ) : (
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#2a2d3e] to-[#1a1d27] flex items-center justify-center text-2xl shadow-inner">
+          {groupIcon(container.name)}
+        </div>
+      )}
+
+      <div className="text-center flex-1 flex flex-col justify-center min-w-0 w-full">
+        <p className="text-[11px] font-semibold text-white leading-tight truncate max-w-[100px] mx-auto" title={container.name}>{displayName}</p>
+        {projectName && (
+          <p className="text-[9px] text-indigo-400/70 truncate max-w-[100px] mx-auto mt-0.5" title={projectName}>
+            {projectName}
+          </p>
+        )}
+        <p className={`text-[10px] mt-0.5 ${running ? 'text-green-400' : 'text-[#64748b]'}`}>
+          {running ? 'rodando' : 'parado'}
+        </p>
+      </div>
+
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {!running ? (
+          <button onClick={e => { e.stopPropagation(); onStart(container.id) }} disabled={busy}
+            className="p-1 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 disabled:opacity-40">
+            <Play size={11} />
+          </button>
+        ) : (
+          <button onClick={e => { e.stopPropagation(); onStop(container.id) }} disabled={busy}
+            className="p-1 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 disabled:opacity-40">
+            <Square size={11} />
+          </button>
+        )}
+        <button onClick={e => { e.stopPropagation(); onRestart(container.id) }} disabled={busy}
+          className="p-1 rounded-lg bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 disabled:opacity-40">
+          <RotateCw size={11} />
+        </button>
+        <button onClick={e => { e.stopPropagation(); navigate('/containers', { state: { highlight: container.id } }) }}
+          className="p-1 rounded-lg bg-[#6366f1]/20 text-indigo-400 hover:bg-[#6366f1]/30" title="Ver container">
+          <ExternalLink size={11} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── visibility filter panel ──────────────────────────────────────────────────
+function VisibilityPanel({ onClose, groups, hidden, setHidden }) {
+  // Build flat list of all containers with their project names
+  const allItems = []
+  groups.forEach(g => {
+    g.containers.forEach(c => {
+      allItems.push({
+        id: c.id,
+        name: c.name,
+        project: g.source === 'compose' ? g.display_name || g.name : null,
+        status: c.status,
+      })
+    })
+  })
+
+  function toggle(id) {
+    setHidden(prev => {
+      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+      localStorage.setItem('pulse_dash_hidden', JSON.stringify(next))
+      return next
+    })
+  }
+
+  function showAll() {
+    setHidden([])
+    localStorage.removeItem('pulse_dash_hidden')
+  }
+
+  function hideAll() {
+    const ids = allItems.map(i => i.id)
+    setHidden(ids)
+    localStorage.setItem('pulse_dash_hidden', JSON.stringify(ids))
+  }
+
+  return (
+    <div className="absolute top-12 right-0 z-50 w-72 bg-[#1a1d27]/95 backdrop-blur-md border border-[#2a2d3e] rounded-2xl shadow-2xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2d3e]">
+        <div className="flex items-center gap-2">
+          <Eye size={14} className="text-indigo-400" />
+          <p className="text-xs font-semibold text-white">Visibilidade</p>
+        </div>
+        <button onClick={onClose} className="text-[#64748b] hover:text-white transition-colors"><X size={14} /></button>
+      </div>
+
+      <div className="flex gap-2 px-4 pt-3">
+        <button onClick={showAll} className="flex-1 text-[10px] py-1.5 rounded-lg bg-[#2a2d3e] text-[#94a3b8] hover:text-white transition-colors">Mostrar todos</button>
+        <button onClick={hideAll} className="flex-1 text-[10px] py-1.5 rounded-lg bg-[#2a2d3e] text-[#94a3b8] hover:text-white transition-colors">Ocultar todos</button>
+      </div>
+
+      <div className="p-2 max-h-[320px] overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: '#2a2d3e transparent' }}>
+        {allItems.map(item => {
+          const isHidden = hidden.includes(item.id)
+          return (
+            <button key={item.id} onClick={() => toggle(item.id)}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-all ${
+                isHidden ? 'opacity-40 hover:opacity-70' : 'hover:bg-white/5'
+              }`}>
+              <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 transition-all ${
+                isHidden ? 'bg-[#2a2d3e] border border-[#475569]' : 'bg-indigo-500 border border-indigo-400'
+              }`}>
+                {!isHidden && <Check size={10} className="text-white" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-white truncate">{item.name}</p>
+                {item.project && <p className="text-[9px] text-indigo-400/60 truncate">{item.project}</p>}
+              </div>
+              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.status === 'running' ? 'bg-green-400' : 'bg-[#475569]'}`} />
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── main ─────────────────────────────────────────────────────────────────────
 function getWallpaper() {
   const url = localStorage.getItem('pulse_wallpaper_url') || ''
@@ -351,7 +497,13 @@ export default function Dashboard() {
   const [wallpaper, setWallpaper] = useState(getWallpaper)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [storageOpen, setStorageOpen] = useState(false)
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('pulse_dash_view') || 'grouped')
+  const [hidden, setHidden] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('pulse_dash_hidden') || '[]') } catch { return [] }
+  })
+  const [filterOpen, setFilterOpen] = useState(false)
   const settingsRef = useRef(null)
+  const filterRef = useRef(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -359,6 +511,21 @@ export default function Dashboard() {
     window.addEventListener('wallpaper-change', handler)
     return () => window.removeEventListener('wallpaper-change', handler)
   }, [])
+
+  // Close filter panel on outside click
+  useEffect(() => {
+    function handleClick(e) {
+      if (filterRef.current && !filterRef.current.contains(e.target)) setFilterOpen(false)
+    }
+    if (filterOpen) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [filterOpen])
+
+  function toggleViewMode() {
+    const next = viewMode === 'grouped' ? 'ungrouped' : 'grouped'
+    setViewMode(next)
+    localStorage.setItem('pulse_dash_view', next)
+  }
 
   async function loadGroups(force = false) {
     try {
@@ -382,13 +549,41 @@ export default function Dashboard() {
     finally { setBusy(b => ({ ...b, [id]: false })) }
   }
 
+  async function containerAction(containerId, fn) {
+    setBusy(b => ({ ...b, [containerId]: true }))
+    try { bust('dash_groups'); await fn(); await loadGroups(true) }
+    catch (e) { alert(e.message) }
+    finally { setBusy(b => ({ ...b, [containerId]: false })) }
+  }
+
   const hasWallpaper = !!(wallpaper.backgroundImage || wallpaper.background)
   const cardClass = hasWallpaper
     ? 'bg-black/30 backdrop-blur-md border-white/10'
     : 'bg-[#1a1d27] border-[#2a2d3e]'
 
-  const runningGroups = groups.filter(g => g.status === 'running' || g.status === 'partial')
-  const stoppedGroups = groups.filter(g => g.status === 'stopped')
+  // ─── Build flat container list for ungrouped mode ───────
+  const allContainers = []
+  groups.forEach(g => {
+    g.containers.forEach(c => {
+      allContainers.push({
+        ...c,
+        projectName: g.source === 'compose' ? (g.display_name || g.name) : null,
+        groupId: g.id,
+      })
+    })
+  })
+  const visibleContainers = allContainers.filter(c => !hidden.includes(c.id))
+  const runningContainers = visibleContainers.filter(c => c.status === 'running')
+  const stoppedContainers = visibleContainers.filter(c => c.status !== 'running')
+
+  // ─── Grouped mode filters (also apply hidden) ──────────
+  const filteredGroups = groups.map(g => {
+    const visibleCs = g.containers.filter(c => !hidden.includes(c.id))
+    if (visibleCs.length === 0) return null
+    return { ...g, containers: visibleCs }
+  }).filter(Boolean)
+  const runningGroups = filteredGroups.filter(g => g.status === 'running' || g.status === 'partial')
+  const stoppedGroups = filteredGroups.filter(g => g.status === 'stopped')
 
   return (
     <div className="h-full overflow-y-auto relative">
@@ -400,13 +595,38 @@ export default function Dashboard() {
           <p className="text-3xl font-bold text-white drop-shadow">
             {greeting()}{getDisplayName() ? `, ${getDisplayName()}` : ''}.
           </p>
-          <div className="relative" ref={settingsRef}>
-            <button onClick={() => setSettingsOpen(o => !o)}
-              className={`p-2 rounded-xl transition-colors ${settingsOpen ? 'bg-[#6366f1] text-white' : 'bg-black/20 backdrop-blur-sm text-[#94a3b8] hover:text-white'}`}
-              title="Aparência">
-              <Image size={16} />
+          <div className="flex items-center gap-2">
+            {/* View mode toggle */}
+            <button onClick={toggleViewMode}
+              className={`p-2 rounded-xl transition-colors bg-black/20 backdrop-blur-sm text-[#94a3b8] hover:text-white`}
+              title={viewMode === 'grouped' ? 'Desagrupar containers' : 'Agrupar containers'}>
+              {viewMode === 'grouped' ? <LayoutList size={16} /> : <Layers size={16} />}
             </button>
-            {settingsOpen && <WallpaperPanel onClose={() => setSettingsOpen(false)} />}
+
+            {/* Visibility filter */}
+            <div className="relative" ref={filterRef}>
+              <button onClick={() => { setFilterOpen(o => !o); setSettingsOpen(false) }}
+                className={`p-2 rounded-xl transition-colors ${filterOpen ? 'bg-[#6366f1] text-white' : 'bg-black/20 backdrop-blur-sm text-[#94a3b8] hover:text-white'}`}
+                title="Filtrar itens">
+                <SlidersHorizontal size={16} />
+                {hidden.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold">
+                    {hidden.length}
+                  </span>
+                )}
+              </button>
+              {filterOpen && <VisibilityPanel onClose={() => setFilterOpen(false)} groups={groups} hidden={hidden} setHidden={setHidden} />}
+            </div>
+
+            {/* Appearance */}
+            <div className="relative" ref={settingsRef}>
+              <button onClick={() => { setSettingsOpen(o => !o); setFilterOpen(false) }}
+                className={`p-2 rounded-xl transition-colors ${settingsOpen ? 'bg-[#6366f1] text-white' : 'bg-black/20 backdrop-blur-sm text-[#94a3b8] hover:text-white'}`}
+                title="Aparência">
+                <Image size={16} />
+              </button>
+              {settingsOpen && <WallpaperPanel onClose={() => setSettingsOpen(false)} />}
+            </div>
           </div>
         </div>
 
@@ -476,13 +696,24 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {runningGroups.map(g => (
+          {/* ─── GROUPED VIEW ─── */}
+          {viewMode === 'grouped' && runningGroups.map(g => (
             <GroupTile key={g.id} group={g} busy={busy[g.id]}
               onStart={id => groupAction(id, () => api.groups.start(id))}
               onStop={id => groupAction(id, () => api.groups.stop(id))}
               onRestart={id => groupAction(id, () => api.groups.restart(id))}
             />
           ))}
+
+          {/* ─── UNGROUPED VIEW ─── */}
+          {viewMode === 'ungrouped' && runningContainers.map(c => (
+            <ContainerTile key={c.id} container={c} projectName={c.projectName} busy={busy[c.id]}
+              onStart={id => containerAction(id, () => api.containers.start(id))}
+              onStop={id => containerAction(id, () => api.containers.stop(id))}
+              onRestart={id => containerAction(id, () => api.containers.restart(id))}
+            />
+          ))}
+
           <div onClick={() => navigate('/store')}
             className={`w-[120px] h-[148px] flex-shrink-0 border border-dashed rounded-2xl p-4 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-[#6366f1]/50 transition-all ${hasWallpaper ? 'bg-black/20 backdrop-blur-sm border-white/20' : 'bg-[#1a1d27] border-[#2a2d3e]'}`}>
             <div className="w-14 h-14 rounded-2xl border-2 border-dashed border-[#2a2d3e] flex items-center justify-center text-[#64748b] text-2xl">+</div>
@@ -491,7 +722,7 @@ export default function Dashboard() {
         </div>
 
         {/* Stopped */}
-        {stoppedGroups.length > 0 && (
+        {viewMode === 'grouped' && stoppedGroups.length > 0 && (
           <div>
             <p className="text-xs text-[#64748b]/80 uppercase tracking-wider mb-3 font-medium drop-shadow">Parados</p>
             <div className="flex flex-wrap gap-3">
@@ -506,6 +737,21 @@ export default function Dashboard() {
           </div>
         )}
 
+        {viewMode === 'ungrouped' && stoppedContainers.length > 0 && (
+          <div>
+            <p className="text-xs text-[#64748b]/80 uppercase tracking-wider mb-3 font-medium drop-shadow">Parados</p>
+            <div className="flex flex-wrap gap-3">
+              {stoppedContainers.map(c => (
+                <ContainerTile key={c.id} container={c} projectName={c.projectName} busy={busy[c.id]}
+                  onStart={id => containerAction(id, () => api.containers.start(id))}
+                  onStop={id => containerAction(id, () => api.containers.stop(id))}
+                  onRestart={id => containerAction(id, () => api.containers.restart(id))}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {groups.length === 0 && (
           <div className="text-center py-20">
             <p className="text-5xl mb-4">📦</p>
@@ -513,6 +759,18 @@ export default function Dashboard() {
               Nenhum container.{' '}
               <span className="text-indigo-400 cursor-pointer hover:underline" onClick={() => navigate('/store')}>
                 Instale um app
+              </span>
+            </p>
+          </div>
+        )}
+
+        {groups.length > 0 && viewMode === 'ungrouped' && visibleContainers.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-3xl mb-3">👁️‍🗨️</p>
+            <p className="text-[#64748b] text-sm drop-shadow">
+              Todos os containers estão ocultos.{' '}
+              <span className="text-indigo-400 cursor-pointer hover:underline" onClick={() => setFilterOpen(true)}>
+                Ajustar filtros
               </span>
             </p>
           </div>
