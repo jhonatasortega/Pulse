@@ -114,9 +114,11 @@ A beautiful, lightweight alternative to Portainer and CasaOS — with a macOS-in
 
 ### Storage & Files
 - **Disk overview modal** — click the storage tile on the dashboard to see disk usage at a glance
+- **Available disks detection** — automatically detects unmounted partitions and external drives (`lsblk` + `blkid`)
+- **Persistent mounting** — mount available disks directly from the UI; entries are automatically added to the host's `/etc/fstab` for persistence after reboot
 - **Full file browser** — browse, upload, download, rename, delete, copy, move files
 - **Cross-disk copy/move** — clipboard persists when switching between disks
-- **Host filesystem access** — browse the Pi's root filesystem (`/host`) and external drives (`/mnt/*`)
+- **Host filesystem access** — browse the Pi's root filesystem (`/host`) and managed drives (`/mnt/*`)
 - **Docker volumes** — browse volume data directly
 - **Inline errors** — no browser `alert()` popups; errors shown inline
 
@@ -174,12 +176,13 @@ services:
     image: pulse-backend:1.0.0
     container_name: pulse_backend
     pid: host                    # required for DNS wizard (nsenter)
+    privileged: true             # required for disk mounting and fstab management
     ports:
       - "3000:3000"
     volumes:
       - ./data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
-      - /:/host:rshared          # Pi root filesystem (file browser + DNS)
+      - /:/host:rshared          # Pi root filesystem (file browser + DNS + fstab)
       - /mnt:/mnt:rshared
       - /media:/media:rshared
       - /home:/home:rshared
