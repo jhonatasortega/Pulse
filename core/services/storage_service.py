@@ -80,7 +80,7 @@ def get_available_disks() -> list:
     try:
         import json
         r = subprocess.run(
-            ["lsblk", "-J", "-o", "NAME,FSTYPE,LABEL,UUID,FSAVAIL,FSSIZE,MOUNTPOINT,SIZE,TYPE"],
+            ["nsenter", "-t", "1", "-m", "lsblk", "-J", "-o", "NAME,FSTYPE,LABEL,UUID,FSAVAIL,FSSIZE,MOUNTPOINT,SIZE,TYPE"],
             capture_output=True, text=True, timeout=5,
         )
         if r.returncode != 0:

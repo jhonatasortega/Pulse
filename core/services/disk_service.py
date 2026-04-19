@@ -7,50 +7,44 @@ FSTAB_PATH = "/host/etc/fstab"
 def mount_disk(uuid: str, mountpoint: str, fstype: str) -> dict:
     """
     Mount a disk by UUID and make it persistent in /etc/fstab.
+    Uses nsenter to execute commands in the host's mount namespace.
     """
-    # 1. Prepare mountpoint on host
-    host_mp = Path("/host") / mountpoint.lstrip("/")
+    # 1. Prepare mountpoint on host via nsenter
     try:
-        host_mp.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["nsenter", "-t", "1", "-m", "mkdir", "-p", mountpoint], check=True)
     except Exception as e:
-        raise Exception(f"Failed to create mountpoint directory: {e}")
+        raise Exception(f"Failed to create mountpoint on host: {e}")
 
-    # 2. Check if already in fstab to avoid duplicates
+    # 2. Add to host's fstab
     if os.path.exists(FSTAB_PATH):
         with open(FSTAB_PATH, "r") as f:
             fstab = f.read()
-        if uuid in fstab:
-            # Already in fstab, just try to mount
-            pass
-        else:
-            # Add to fstab
+        if uuid not in fstab:
             entry = f"\nUUID={uuid}  {mountpoint}  {fstype}  defaults,nofail  0  2\n"
             with open(FSTAB_PATH, "a") as f:
                 f.write(entry)
 
-    # 3. Mount it
-    # We use 'mount -a' to mount everything in fstab, which is safer
+    # 3. Mount on host via nsenter
+    # We try mount -a first, fallback to specific mount
     try:
-        r = subprocess.run(["mount", "-a"], capture_output=True, text=True)
+        r = subprocess.run(["nsenter", "-t", "1", "-m", "mount", "-a"], capture_output=True, text=True)
         if r.returncode != 0:
-            # If mount -a fails, try specific mount
-            r2 = subprocess.run(["mount", f"UUID={uuid}", mountpoint], capture_output=True, text=True)
+            r2 = subprocess.run(["nsenter", "-t", "1", "-m", "mount", "-U", uuid, mountpoint], capture_output=True, text=True)
             if r2.returncode != 0:
-                raise Exception(f"Mount failed: {r2.stderr or r2.stdout}")
+                raise Exception(f"Mount on host failed: {r2.stderr or r2.stdout}")
     except Exception as e:
-        raise Exception(f"Execution error: {e}")
+        raise Exception(f"Execution error on host: {e}")
 
     return {"ok": True, "mountpoint": mountpoint}
 
 
 def unmount_disk(mountpoint: str) -> dict:
     """
-    Unmount a disk and remove from fstab.
+    Unmount a disk and remove from fstab on host.
     """
-    # 1. Unmount
+    # 1. Unmount on host
     try:
-        r = subprocess.run(["umount", "-l", mountpoint], capture_output=True, text=True)
-        # Even if it fails (already unmounted), we proceed to cleanup fstab
+        subprocess.run(["nsenter", "-t", "1", "-m", "umount", "-l", mountpoint], capture_output=False)
     except Exception:
         pass
 
