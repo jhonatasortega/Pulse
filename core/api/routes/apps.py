@@ -243,9 +243,16 @@ def custom_install(req: CustomInstallRequest, background_tasks: BackgroundTasks)
 
     environment = {e.key: e.value for e in req.env if e.key.strip()}
 
+    import re
+    slug = re.sub(r'[^a-z0-9]+', '-', req.name.lower()).strip('-')
+    app_id = f"custom_{slug}"
+
     labels = {
+        "pulse.managed": "true",
+        "pulse.app": app_id,
+        "pulse.display_name": req.name,
+        "pulse.icon": req.icon_url or "",
         "pulse.custom": "true",
-        "pulse.icon_url": req.icon_url,
         "pulse.webui_port": req.webui_port,
         "pulse.webui_path": req.webui_path,
     }
@@ -275,7 +282,7 @@ def custom_install(req: CustomInstallRequest, background_tasks: BackgroundTasks)
 
     try:
         # Register app state immediately so Dashboard can show it
-        app_id = f"custom_{req.name}"
+        # (app_id already calculated above)
         state = {
             "id": app_id,
             "name": req.name,
