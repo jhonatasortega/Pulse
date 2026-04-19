@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"docker compose -f ~/docker-compose.gopeed.yml up -d --force-recreate 2>&1 && docker compose -f ~/docker-compose.plex.yml up -d --force-recreate 2>&1\")",
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"docker compose -f ~/docker-compose.gopeed.yml up -d --force-recreate 2>&1\")",
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"curl -s http://localhost:9999/api/v1/config | python3 -m json.tool 2>/dev/null | head -30\")",
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"curl -s -X PATCH http://localhost:9999/api/v1/config -H 'Content-Type: application/json' -d '{\\\\\"downloadDir\\\\\":\\\\\"/app/Downloads\\\\\"}' | python3 -m json.tool\")",
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"curl -s -X PATCH http://localhost:9999/api/v1/config -H 'Content-Type: application/json' -d '{\\\\\"downloadDir\\\\\":\\\\\"/app/Downloads\\\\\"}'\")",
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"curl -s http://localhost:9999/api/v1/ 2>&1 | head -5; curl -s -X PUT http://localhost:9999/api/v1/config -H 'Content-Type: application/json' -d '{\\\\\"downloadDir\\\\\":\\\\\"/app/Downloads\\\\\"}'\")",
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"curl -s http://localhost:9999/api/v1/categories\")",
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"curl -s http://localhost:3000/api/containers/ | python3 -c 'import sys,json; cs=json.load\\(sys.stdin\\); [print\\(c[\\\\\"id\\\\\"], c[\\\\\"name\\\\\"], c[\\\\\"status\\\\\"]\\) for c in cs]'\")",
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"curl -s http://localhost:3000/api/metrics/container/pulse_backend 2>&1\")",
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"docker logs pulse_backend --tail=20 2>&1\")",
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"docker logs pulse_backend 2>&1 | grep -i 'metric\\\\|stats\\\\|error\\\\|exception' | tail -20\")",
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"docker logs pulse_backend 2>&1 | grep 'GET /api/metrics/container' | tail -1 | grep -oP '[a-f0-9]{12}'\")",
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"docker ps --format '{{.ID}}' | head -1 | xargs -I{} curl -s -u admin:admin http://localhost:3000/api/metrics/container/{} 2>&1\")",
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"docker stats --no-stream --format 'table {{.Name}}\\\\t{{.CPUPerc}}\\\\t{{.MemUsage}}' 2>&1\")",
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"docker inspect pulse_backend | python3 -c 'import sys,json; d=json.load\\(sys.stdin\\)[0]; ms=d.get\\(\\\\\"HostConfig\\\\\",{}\\).get\\(\\\\\"Memory\\\\\",0\\); print\\(\\\\\"Memory limit:\\\\\", ms\\)'\")",
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"cat /boot/firmware/cmdline.txt\")",
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"sudo sed -i 's/$/ cgroup_memory=1 cgroup_enable=memory/' /boot/firmware/cmdline.txt && cat /boot/firmware/cmdline.txt\")",
+      "Bash(ssh -i ~/.ssh/id_ed25519 jortega@192.168.0.233 \"sudo reboot\")",
+      "Bash(ls docker-compose*.yml)",
+      "Bash(scp -i ~/.ssh/id_ed25519 \"/c/Users/Jhonatas Ortega/Documents/Projetos/Pulse/docker-compose.yml\" jortega@192.168.0.233:~/pulse/docker-compose.yml)",
+      "Bash(gh api:*)",
+      "Bash(python3 -c ':*)"
+    ]
+  }
+}
